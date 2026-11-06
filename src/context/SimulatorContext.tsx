@@ -8,6 +8,7 @@ import {
   TyreDimensions,
   PartType,
   Scanner,
+  ScannerLibraryItem,
   MotionSimulation,
   TelemetryState,
   ViewSettings,
@@ -16,6 +17,7 @@ import {
   UnitConfig
 } from '../types';
 import { INITIAL_SCANNERS, PRESET_TUNNELS } from '../utils/presets';
+import { loadSavedScannerLibrary, saveScannerLibrary } from '../utils/scannerLibraryPresets';
 import { getCartonBarcodeTargets, getTyreBarcodeTargets, getScannerMatrix, testBarcodeScannerIntersection } from '../utils/math3d';
 import * as THREE from 'three';
 
@@ -55,6 +57,15 @@ interface SimulatorContextType {
   moveScanner: (id: string, direction: 'up' | 'down') => void;
   reorderScanners: (fromIndex: number, toIndex: number) => void;
   loadPreset: (presetName: string) => void;
+
+  // Scanner Library & FOV Presets
+  scannerLibrary: ScannerLibraryItem[];
+  addLibraryScanner: (item: Omit<ScannerLibraryItem, 'id'>) => string;
+  updateLibraryScanner: (id: string, updates: Partial<ScannerLibraryItem>) => void;
+  removeLibraryScanner: (id: string) => void;
+  applyLibraryScannerToScanner: (scannerId: string, libraryItemId: string) => void;
+  isScannerLibraryOpen: boolean;
+  setIsScannerLibraryOpen: (open: boolean) => void;
 
   // Motion simulation
   motion: MotionSimulation;
@@ -157,6 +168,8 @@ export const SimulatorProvider: React.FC<{ children: ReactNode }> = ({ children 
   const [tyre, setTyre] = useState<TyreConfig>(DEFAULT_TYRE);
   const [scanners, setScanners] = useState<Scanner[]>(INITIAL_SCANNERS);
   const [selectedScannerId, setSelectedScannerId] = useState<string | null>(null);
+  const [scannerLibrary, setScannerLibrary] = useState<ScannerLibraryItem[]>(() => loadSavedScannerLibrary());
+  const [isScannerLibraryOpen, setIsScannerLibraryOpen] = useState(false);
 
   const [motion, setMotion] = useState<MotionSimulation>({
     isPlaying: true,
@@ -382,6 +395,66 @@ export const SimulatorProvider: React.FC<{ children: ReactNode }> = ({ children 
       }));
     }
   }, []);
+
+  const addLibraryScanner = useCallback((item: Omit<ScannerLibraryItem, 'id'>): string => {
+    const newId = `custom-scanner-${Date.now()}`;
+    const newItem: ScannerLibraryItem = {
+      ...item,
+      id: newId,
+      isCustom: true,
+      createdAt: new Date().toISOString()
+    };
+    setScannerLibrary(prev => {
+      const updated = [newItem, ...prev];
+      saveScannerLibrary(updated);
+      return updated;
+    });
+    return newId;
+  }, []);
+
+  const updateLibraryScanner = useCallback((id: string, updates: Partial<ScannerLibraryItem>) => {
+    setScannerLibrary(prev => {
+      const updated = prev.map(item => (item.id === id ? { ...item, ...updates } : item));
+      saveScannerLibrary(updated);
+      return updated;
+    });
+  }, []);
+
+  const removeLibraryScanner = useCallback((id: string) => {
+    setScannerLibrary(prev => {
+      const updated = prev.filter(item => item.id !== id);
+      saveScannerLibrary(updated);
+      return updated;
+    });
+  }, []);
+
+  const applyLibraryScannerToScanner = useCallback((scannerId: string, libraryItemId: string) => {
+    const libItem = scannerLibrary.find(l => l.id === libraryItemId);
+    if (!libItem) return;
+
+    setScanners(prev => prev.map(s => {
+      if (s.id !== scannerId) return s;
+      if (s.isLocked) {
+        alert(`Scanner "${s.name}" is locked. Unlock it before changing its preset.`);
+        return s;
+      }
+      return {
+        ...s,
+        optical: {
+          ...s.optical,
+          horizontalFov: libItem.optical.horizontalFov,
+          verticalFov: libItem.optical.verticalFov,
+          dofNear: libItem.optical.dofNear,
+          dofFar: libItem.optical.dofFar,
+          maxRange: libItem.optical.maxRange,
+          resolution: libItem.optical.resolution,
+          scannerModel: `${libItem.manufacturer} ${libItem.name}`,
+          focalLengthMm: libItem.optical.focalLengthMm,
+          twoPointCalibration: libItem.optical.twoPointCalibration
+        }
+      };
+    }));
+  }, [scannerLibrary]);
 
   const setMotionPlaying = useCallback((playing: boolean) => {
     setMotion(prev => ({ ...prev, isPlaying: playing }));
@@ -787,6 +860,13 @@ export const SimulatorProvider: React.FC<{ children: ReactNode }> = ({ children 
         moveScanner,
         reorderScanners,
         loadPreset,
+        scannerLibrary,
+        addLibraryScanner,
+        updateLibraryScanner,
+        removeLibraryScanner,
+        applyLibraryScannerToScanner,
+        isScannerLibraryOpen,
+        setIsScannerLibraryOpen,
         motion,
         setMotionPlaying,
         setMotionProgress,

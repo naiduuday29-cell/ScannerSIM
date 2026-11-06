@@ -12,7 +12,8 @@ import {
   GripVertical,
   MoreVertical,
   Lock,
-  Unlock
+  Unlock,
+  Layers
 } from 'lucide-react';
 import { useSimulator } from '../../context/SimulatorContext';
 import { NumberSliderInput } from '../common/NumberSliderInput';
@@ -29,7 +30,10 @@ export const ScannerDeploymentCard: React.FC = () => {
     updateScanner,
     removeScanner,
     duplicateScanner,
-    reorderScanners
+    reorderScanners,
+    scannerLibrary,
+    applyLibraryScannerToScanner,
+    setIsScannerLibraryOpen
   } = useSimulator();
 
   // Collapsed at opening as requested
@@ -243,17 +247,80 @@ export const ScannerDeploymentCard: React.FC = () => {
 
                             {/* Menu Card */}
                             <div
-                              className="absolute right-0 top-full mt-1 w-40 bg-slate-900 border border-slate-700/90 rounded-lg shadow-2xl z-50 py-1 text-[11px] font-medium text-slate-200 backdrop-blur-md"
+                              className="absolute right-0 top-full mt-1 w-64 bg-slate-900 border border-slate-700/90 rounded-xl shadow-2xl z-50 py-1.5 text-[11px] font-medium text-slate-200 backdrop-blur-md"
                               onClick={(e) => e.stopPropagation()}
                             >
-                              {/* Lock / Unlock Toggle */}
+                              {/* 1. Scanner Preset FOV Dropdown */}
+                              <div className="px-3 py-2 border-b border-slate-800">
+                                <div className="flex items-center justify-between mb-1.5">
+                                  <span className="text-[10px] font-mono text-cyan-400 font-bold flex items-center gap-1">
+                                    <Layers className="w-3.5 h-3.5" />
+                                    <span>SELECT SCANNER PRESET</span>
+                                  </span>
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setOpenMenuScannerId(null);
+                                      setIsScannerLibraryOpen(true);
+                                    }}
+                                    className="text-[9px] text-slate-400 hover:text-cyan-300 underline cursor-pointer"
+                                    title="Open Scanner Library"
+                                  >
+                                    Library
+                                  </button>
+                                </div>
+
+                                <select
+                                  value=""
+                                  onChange={(e) => {
+                                    const selectedId = e.target.value;
+                                    if (selectedId) {
+                                      applyLibraryScannerToScanner(scanner.id, selectedId);
+                                      setOpenMenuScannerId(null);
+                                    }
+                                  }}
+                                  disabled={scanner.isLocked}
+                                  className="w-full bg-slate-950 border border-slate-700 hover:border-cyan-500/50 rounded-lg px-2 py-1.5 text-xs text-slate-200 focus:outline-none focus:border-cyan-400 cursor-pointer disabled:opacity-40"
+                                >
+                                  <option value="" disabled>
+                                    Choose Scanner Model Preset...
+                                  </option>
+                                  {['Keyence', 'Cognex', 'SICK', 'Datalogic', 'Custom'].map((mfr) => {
+                                    const items = scannerLibrary.filter(
+                                      (i) => (i.manufacturer || 'Custom').toLowerCase() === mfr.toLowerCase()
+                                    );
+                                    if (items.length === 0) return null;
+                                    return (
+                                      <optgroup key={mfr} label={mfr} className="bg-slate-900 text-slate-300 font-semibold">
+                                        {items.map((item) => (
+                                          <option key={item.id} value={item.id} className="bg-slate-950 text-slate-200">
+                                            {item.name} ({item.optical.horizontalFov}°×{item.optical.verticalFov}°)
+                                          </option>
+                                        ))}
+                                      </optgroup>
+                                    );
+                                  })}
+                                </select>
+
+                                {/* Current Active Model / FOV Info */}
+                                <div className="mt-1.5 pt-1 border-t border-slate-800/60 flex items-center justify-between text-[10px] font-mono text-slate-400">
+                                  <span className="truncate max-w-[130px] text-cyan-300" title={scanner.optical.scannerModel}>
+                                    {scanner.optical.scannerModel || 'Custom FOV'}
+                                  </span>
+                                  <span className="text-emerald-400 font-bold">
+                                    {scanner.optical.horizontalFov}° × {scanner.optical.verticalFov}°
+                                  </span>
+                                </div>
+                              </div>
+
+                              {/* 2. Lock / Unlock Toggle */}
                               <button
                                 type="button"
                                 onClick={() => {
                                   updateScanner(scanner.id, { isLocked: !scanner.isLocked });
                                   setOpenMenuScannerId(null);
                                 }}
-                                className="w-full px-2.5 py-1.5 text-left flex items-center gap-2 hover:bg-slate-800 text-slate-200 hover:text-cyan-300 transition-colors"
+                                className="w-full px-3 py-2 text-left flex items-center gap-2.5 hover:bg-slate-800 text-slate-200 hover:text-cyan-300 transition-colors cursor-pointer"
                               >
                                 {scanner.isLocked ? (
                                   <>
@@ -268,22 +335,22 @@ export const ScannerDeploymentCard: React.FC = () => {
                                 )}
                               </button>
 
-                              {/* Duplicate */}
+                              {/* 3. Duplicate */}
                               <button
                                 type="button"
                                 onClick={() => {
                                   duplicateScanner(scanner.id);
                                   setOpenMenuScannerId(null);
                                 }}
-                                className="w-full px-2.5 py-1.5 text-left flex items-center gap-2 hover:bg-slate-800 text-slate-200 hover:text-cyan-300 transition-colors"
+                                className="w-full px-3 py-2 text-left flex items-center gap-2.5 hover:bg-slate-800 text-slate-200 hover:text-cyan-300 transition-colors cursor-pointer"
                               >
                                 <Copy className="w-3.5 h-3.5 text-slate-400 flex-shrink-0" />
-                                <span>Duplicate</span>
+                                <span>Duplicate Scanner</span>
                               </button>
 
                               <div className="my-1 border-t border-slate-800" />
 
-                              {/* Delete */}
+                              {/* 4. Delete */}
                               <button
                                 type="button"
                                 disabled={scanner.isLocked}
@@ -292,14 +359,14 @@ export const ScannerDeploymentCard: React.FC = () => {
                                   setOpenMenuScannerId(null);
                                 }}
                                 title={scanner.isLocked ? 'Unlock scanner before deleting' : 'Delete scanner'}
-                                className={`w-full px-2.5 py-1.5 text-left flex items-center gap-2 transition-colors ${
+                                className={`w-full px-3 py-2 text-left flex items-center gap-2.5 transition-colors cursor-pointer ${
                                   scanner.isLocked
                                     ? 'opacity-40 text-slate-500 cursor-not-allowed'
                                     : 'text-rose-400 hover:bg-rose-950/40 hover:text-rose-300'
                                 }`}
                               >
                                 <Trash2 className="w-3.5 h-3.5 flex-shrink-0" />
-                                <span>Delete</span>
+                                <span>Delete Scanner</span>
                               </button>
                             </div>
                           </>

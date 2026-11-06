@@ -11,13 +11,15 @@ import {
   Crown,
   LogIn,
   LogOut,
-  ChevronDown
+  ChevronDown,
+  Layers
 } from 'lucide-react';
 import { useSimulator } from '../../context/SimulatorContext';
 import { useAuth } from '../../context/AuthContext';
 import { CadReportModal } from '../common/CadReportModal';
 import { UserProfileModal } from '../auth/UserProfileModal';
 import { AuthModal } from '../auth/AuthModal';
+import { ScannerLibraryModal } from '../modals/ScannerLibraryModal';
 
 // Circular user avatar matching user uploaded reference icon
 const ProfileAvatarIcon: React.FC<{ className?: string }> = ({ className = "w-8 h-8" }) => (
@@ -45,7 +47,9 @@ export const Header: React.FC = () => {
     conveyor,
     units,
     exportConfiguration,
-    importConfiguration
+    importConfiguration,
+    isScannerLibraryOpen,
+    setIsScannerLibraryOpen
   } = useSimulator();
 
   const {
@@ -299,6 +303,18 @@ export const Header: React.FC = () => {
                       <Sparkles className="w-4 h-4 text-amber-400" />
                       <span>Pricing</span>
                     </button>
+
+                    {/* 3. Scanner Library Option */}
+                    <button
+                      onClick={() => {
+                        setIsUserMenuOpen(false);
+                        setIsScannerLibraryOpen(true);
+                      }}
+                      className="w-full px-3 py-2 rounded-xl text-left text-xs font-medium text-slate-200 hover:text-white hover:bg-slate-800/80 flex items-center gap-2.5 transition-colors cursor-pointer"
+                    >
+                      <Layers className="w-4 h-4 text-emerald-400" />
+                      <span>Scanner Library</span>
+                    </button>
                   </div>
 
                   {/* Divider */}
@@ -359,6 +375,12 @@ export const Header: React.FC = () => {
         onClose={() => setIsAuthModalOpen(false)}
         initialMode={authModalMode}
         onOpenPricing={() => openUserProfile('pricing')}
+      />
+
+      {/* Industrial Scanner Optical FOV Library Modal */}
+      <ScannerLibraryModal
+        isOpen={isScannerLibraryOpen}
+        onClose={() => setIsScannerLibraryOpen(false)}
       />
     </>
   );
