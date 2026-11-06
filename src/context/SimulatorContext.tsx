@@ -8,16 +8,15 @@ import {
   TyreDimensions,
   PartType,
   Scanner,
-  ScannerLibraryItem,
   MotionSimulation,
   TelemetryState,
   ViewSettings,
   ScanHitInfo,
   TrajectorySample,
-  UnitConfig
+  UnitConfig,
+  ScannerLibraryPreset
 } from '../types';
 import { INITIAL_SCANNERS, PRESET_TUNNELS } from '../utils/presets';
-import { loadSavedScannerLibrary, saveScannerLibrary } from '../utils/scannerLibraryPresets';
 import { getCartonBarcodeTargets, getTyreBarcodeTargets, getScannerMatrix, testBarcodeScannerIntersection } from '../utils/math3d';
 import * as THREE from 'three';
 
@@ -58,15 +57,6 @@ interface SimulatorContextType {
   reorderScanners: (fromIndex: number, toIndex: number) => void;
   loadPreset: (presetName: string) => void;
 
-  // Scanner Library & FOV Presets
-  scannerLibrary: ScannerLibraryItem[];
-  addLibraryScanner: (item: Omit<ScannerLibraryItem, 'id'>) => string;
-  updateLibraryScanner: (id: string, updates: Partial<ScannerLibraryItem>) => void;
-  removeLibraryScanner: (id: string) => void;
-  applyLibraryScannerToScanner: (scannerId: string, libraryItemId: string) => void;
-  isScannerLibraryOpen: boolean;
-  setIsScannerLibraryOpen: (open: boolean) => void;
-
   // Motion simulation
   motion: MotionSimulation;
   setMotionPlaying: (playing: boolean) => void;
@@ -91,6 +81,15 @@ interface SimulatorContextType {
   // Export / Import
   exportConfiguration: () => void;
   importConfiguration: (jsonString: string) => boolean;
+
+  // Scanner Library Presets
+  scannerLibrary: ScannerLibraryPreset[];
+  addScannerPreset: (preset: Omit<ScannerLibraryPreset, 'id' | 'createdAt'>) => ScannerLibraryPreset;
+  updateScannerPreset: (id: string, updates: Partial<ScannerLibraryPreset>) => void;
+  deleteScannerPreset: (id: string) => void;
+  applyScannerPreset: (scannerId: string, presetId: string) => void;
+  isScannerLibraryOpen: boolean;
+  setIsScannerLibraryOpen: (open: boolean) => void;
 }
 
 const SimulatorContext = createContext<SimulatorContextType | undefined>(undefined);
@@ -108,6 +107,21 @@ const DEFAULT_CONVEYOR: ConveyorConfig = {
   sideRailHeight: 0.08,
   color: '#00843D'
 };
+
+const SCANNER_LIBRARY_STORAGE_KEY = 'scannersim_scanner_library';
+
+function loadInitialScannerLibrary(): ScannerLibraryPreset[] {
+  try {
+    const raw = localStorage.getItem(SCANNER_LIBRARY_STORAGE_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) return parsed;
+    }
+  } catch (e) {
+    console.error('Failed to load scanner library from storage', e);
+  }
+  return []; // Empty when started as requested
+}
 
 const DEFAULT_CARTON: CartonConfig = {
   smallCarton: { length: 0.32, width: 0.22, height: 0.18, weightKg: 2.5 },
@@ -168,8 +182,18 @@ export const SimulatorProvider: React.FC<{ children: ReactNode }> = ({ children 
   const [tyre, setTyre] = useState<TyreConfig>(DEFAULT_TYRE);
   const [scanners, setScanners] = useState<Scanner[]>(INITIAL_SCANNERS);
   const [selectedScannerId, setSelectedScannerId] = useState<string | null>(null);
-  const [scannerLibrary, setScannerLibrary] = useState<ScannerLibraryItem[]>(() => loadSavedScannerLibrary());
+
+  // Scanner Library FOV Presets
+  const [scannerLibrary, setScannerLibrary] = useState<ScannerLibraryPreset[]>(loadInitialScannerLibrary);
   const [isScannerLibraryOpen, setIsScannerLibraryOpen] = useState(false);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(SCANNER_LIBRARY_STORAGE_KEY, JSON.stringify(scannerLibrary));
+    } catch (e) {
+      console.error('Failed to save scanner library to localStorage', e);
+    }
+  }, [scannerLibrary]);
 
   const [motion, setMotion] = useState<MotionSimulation>({
     isPlaying: true,
@@ -377,6 +401,50 @@ export const SimulatorProvider: React.FC<{ children: ReactNode }> = ({ children 
     setSelectedScannerId(duplicated.id);
   }, [scanners]);
 
+  // Scanner Library Actions
+  const addScannerPreset = useCallback((presetData: Omit<ScannerLibraryPreset, 'id' | 'createdAt'>): ScannerLibraryPreset => {
+    const newPreset: ScannerLibraryPreset = {
+      ...presetData,
+      id: `preset-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+      createdAt: Date.now()
+    };
+    setScannerLibrary(prev => [newPreset, ...prev]);
+    return newPreset;
+  }, []);
+
+  const updateScannerPreset = useCallback((id: string, updates: Partial<ScannerLibraryPreset>) => {
+    setScannerLibrary(prev => prev.map(p => p.id === id ? { ...p, ...updates } : p));
+  }, []);
+
+  const deleteScannerPreset = useCallback((id: string) => {
+    setScannerLibrary(prev => prev.filter(p => p.id !== id));
+  }, []);
+
+  const applyScannerPreset = useCallback((scannerId: string, presetId: string) => {
+    const preset = scannerLibrary.find(p => p.id === presetId);
+    if (!preset) return;
+
+    setScanners(prev => prev.map(s => {
+      if (s.id !== scannerId) return s;
+      return {
+        ...s,
+        optical: {
+          ...s.optical,
+          horizontalFov: preset.optical.horizontalFov,
+          verticalFov: preset.optical.verticalFov,
+          dofNear: preset.optical.dofNear,
+          dofFar: preset.optical.dofFar,
+          maxRange: preset.optical.maxRange || s.optical.maxRange,
+          focalLengthMm: preset.optical.focalLengthMm || s.optical.focalLengthMm,
+          scannerModel: preset.name,
+          twoPointCalibration: preset.optical.twoPointCalibration
+            ? { ...preset.optical.twoPointCalibration }
+            : undefined
+        }
+      };
+    }));
+  }, [scannerLibrary]);
+
   const loadPreset = useCallback((presetName: string) => {
     const preset = PRESET_TUNNELS.find(p => p.name === presetName);
     if (preset) {
@@ -395,66 +463,6 @@ export const SimulatorProvider: React.FC<{ children: ReactNode }> = ({ children 
       }));
     }
   }, []);
-
-  const addLibraryScanner = useCallback((item: Omit<ScannerLibraryItem, 'id'>): string => {
-    const newId = `custom-scanner-${Date.now()}`;
-    const newItem: ScannerLibraryItem = {
-      ...item,
-      id: newId,
-      isCustom: true,
-      createdAt: new Date().toISOString()
-    };
-    setScannerLibrary(prev => {
-      const updated = [newItem, ...prev];
-      saveScannerLibrary(updated);
-      return updated;
-    });
-    return newId;
-  }, []);
-
-  const updateLibraryScanner = useCallback((id: string, updates: Partial<ScannerLibraryItem>) => {
-    setScannerLibrary(prev => {
-      const updated = prev.map(item => (item.id === id ? { ...item, ...updates } : item));
-      saveScannerLibrary(updated);
-      return updated;
-    });
-  }, []);
-
-  const removeLibraryScanner = useCallback((id: string) => {
-    setScannerLibrary(prev => {
-      const updated = prev.filter(item => item.id !== id);
-      saveScannerLibrary(updated);
-      return updated;
-    });
-  }, []);
-
-  const applyLibraryScannerToScanner = useCallback((scannerId: string, libraryItemId: string) => {
-    const libItem = scannerLibrary.find(l => l.id === libraryItemId);
-    if (!libItem) return;
-
-    setScanners(prev => prev.map(s => {
-      if (s.id !== scannerId) return s;
-      if (s.isLocked) {
-        alert(`Scanner "${s.name}" is locked. Unlock it before changing its preset.`);
-        return s;
-      }
-      return {
-        ...s,
-        optical: {
-          ...s.optical,
-          horizontalFov: libItem.optical.horizontalFov,
-          verticalFov: libItem.optical.verticalFov,
-          dofNear: libItem.optical.dofNear,
-          dofFar: libItem.optical.dofFar,
-          maxRange: libItem.optical.maxRange,
-          resolution: libItem.optical.resolution,
-          scannerModel: `${libItem.manufacturer} ${libItem.name}`,
-          focalLengthMm: libItem.optical.focalLengthMm,
-          twoPointCalibration: libItem.optical.twoPointCalibration
-        }
-      };
-    }));
-  }, [scannerLibrary]);
 
   const setMotionPlaying = useCallback((playing: boolean) => {
     setMotion(prev => ({ ...prev, isPlaying: playing }));
@@ -596,14 +604,15 @@ export const SimulatorProvider: React.FC<{ children: ReactNode }> = ({ children 
 
   const exportConfiguration = useCallback(() => {
     const exportData = {
-      version: '1.3',
+      version: '1.4',
       timestamp: new Date().toISOString(),
       units,
       partType,
       conveyor,
       carton,
       tyre,
-      scanners
+      scanners,
+      scannerLibrary
     };
     const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
@@ -612,7 +621,7 @@ export const SimulatorProvider: React.FC<{ children: ReactNode }> = ({ children 
     a.download = `scanner-coverage-setup-${Date.now()}.json`;
     a.click();
     URL.revokeObjectURL(url);
-  }, [units, partType, conveyor, carton, tyre, scanners]);
+  }, [units, partType, conveyor, carton, tyre, scanners, scannerLibrary]);
 
   const importConfiguration = useCallback((jsonString: string): boolean => {
     try {
@@ -623,6 +632,7 @@ export const SimulatorProvider: React.FC<{ children: ReactNode }> = ({ children 
       if (data.carton) setCarton(data.carton);
       if (data.tyre) setTyre(data.tyre);
       if (Array.isArray(data.scanners)) setScanners(data.scanners);
+      if (Array.isArray(data.scannerLibrary)) setScannerLibrary(data.scannerLibrary);
       resetMotion();
       return true;
     } catch (e) {
@@ -860,13 +870,6 @@ export const SimulatorProvider: React.FC<{ children: ReactNode }> = ({ children 
         moveScanner,
         reorderScanners,
         loadPreset,
-        scannerLibrary,
-        addLibraryScanner,
-        updateLibraryScanner,
-        removeLibraryScanner,
-        applyLibraryScannerToScanner,
-        isScannerLibraryOpen,
-        setIsScannerLibraryOpen,
         motion,
         setMotionPlaying,
         setMotionProgress,
@@ -883,7 +886,14 @@ export const SimulatorProvider: React.FC<{ children: ReactNode }> = ({ children 
         snapCameraTo,
         snapCameraToAngles,
         exportConfiguration,
-        importConfiguration
+        importConfiguration,
+        scannerLibrary,
+        addScannerPreset,
+        updateScannerPreset,
+        deleteScannerPreset,
+        applyScannerPreset,
+        isScannerLibraryOpen,
+        setIsScannerLibraryOpen
       }}
     >
       {children}

@@ -89,14 +89,12 @@ export interface OpticalSpecs {
   twoPointCalibration?: OpticalTwoPointCalibration;
 }
 
-export interface ScannerLibraryItem {
+export interface ScannerLibraryPreset {
   id: string;
   name: string;
-  manufacturer: string;
   description?: string;
   optical: OpticalSpecs;
-  isCustom?: boolean;
-  createdAt?: string;
+  createdAt: number;
 }
 
 export interface Scanner {

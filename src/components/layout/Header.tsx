@@ -12,14 +12,14 @@ import {
   LogIn,
   LogOut,
   ChevronDown,
-  Layers
+  BookOpen
 } from 'lucide-react';
 import { useSimulator } from '../../context/SimulatorContext';
 import { useAuth } from '../../context/AuthContext';
 import { CadReportModal } from '../common/CadReportModal';
 import { UserProfileModal } from '../auth/UserProfileModal';
 import { AuthModal } from '../auth/AuthModal';
-import { ScannerLibraryModal } from '../modals/ScannerLibraryModal';
+import { ScannerLibraryModal } from '../library/ScannerLibraryModal';
 
 // Circular user avatar matching user uploaded reference icon
 const ProfileAvatarIcon: React.FC<{ className?: string }> = ({ className = "w-8 h-8" }) => (
@@ -48,7 +48,7 @@ export const Header: React.FC = () => {
     units,
     exportConfiguration,
     importConfiguration,
-    isScannerLibraryOpen,
+    scannerLibrary,
     setIsScannerLibraryOpen
   } = useSimulator();
 
@@ -292,7 +292,26 @@ export const Header: React.FC = () => {
                       <span>Account</span>
                     </button>
 
-                    {/* 2. Pricing Option */}
+                    {/* 2. Scanner Library Option */}
+                    <button
+                      onClick={() => {
+                        setIsUserMenuOpen(false);
+                        setIsScannerLibraryOpen(true);
+                      }}
+                      className="w-full px-3 py-2 rounded-xl text-left text-xs font-medium text-slate-200 hover:text-white hover:bg-slate-800/80 flex items-center justify-between transition-colors cursor-pointer"
+                    >
+                      <div className="flex items-center gap-2.5">
+                        <BookOpen className="w-4 h-4 text-cyan-400" />
+                        <span>Scanner Library</span>
+                      </div>
+                      {scannerLibrary.length > 0 && (
+                        <span className="text-[10px] font-mono font-bold px-1.5 py-0.2 rounded bg-cyan-500/20 text-cyan-300 border border-cyan-500/30">
+                          {scannerLibrary.length}
+                        </span>
+                      )}
+                    </button>
+
+                    {/* 3. Pricing Option */}
                     <button
                       onClick={() => {
                         setIsUserMenuOpen(false);
@@ -302,18 +321,6 @@ export const Header: React.FC = () => {
                     >
                       <Sparkles className="w-4 h-4 text-amber-400" />
                       <span>Pricing</span>
-                    </button>
-
-                    {/* 3. Scanner Library Option */}
-                    <button
-                      onClick={() => {
-                        setIsUserMenuOpen(false);
-                        setIsScannerLibraryOpen(true);
-                      }}
-                      className="w-full px-3 py-2 rounded-xl text-left text-xs font-medium text-slate-200 hover:text-white hover:bg-slate-800/80 flex items-center gap-2.5 transition-colors cursor-pointer"
-                    >
-                      <Layers className="w-4 h-4 text-emerald-400" />
-                      <span>Scanner Library</span>
                     </button>
                   </div>
 
@@ -377,11 +384,8 @@ export const Header: React.FC = () => {
         onOpenPricing={() => openUserProfile('pricing')}
       />
 
-      {/* Industrial Scanner Optical FOV Library Modal */}
-      <ScannerLibraryModal
-        isOpen={isScannerLibraryOpen}
-        onClose={() => setIsScannerLibraryOpen(false)}
-      />
+      {/* Scanner FOV Library & Presets Modal */}
+      <ScannerLibraryModal />
     </>
   );
 };
