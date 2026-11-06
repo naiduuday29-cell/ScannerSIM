@@ -1,9 +1,9 @@
-import React, { useRef, useState, useEffect, useMemo } from 'react';
+import React, { useRef, useState, useMemo } from 'react';
 import { Canvas, useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
 import { useSimulator } from '../../context/SimulatorContext';
 import { cameraSyncState } from '../../utils/cameraSync';
-import { Compass, Eye, RotateCcw } from 'lucide-react';
+import { Compass, RotateCcw } from 'lucide-react';
 
 type FaceName = 'TOP' | 'BOTTOM' | 'FRONT' | 'BACK' | 'LEFT' | 'RIGHT';
 
@@ -130,44 +130,22 @@ const ViewCubeModel: React.FC<{
 };
 
 export const ViewCube: React.FC = () => {
-  const { snapCameraTo, snapCameraToAngles } = useSimulator();
+  const { snapCameraTo } = useSimulator();
   const [hoveredFace, setHoveredFace] = useState<FaceName | null>(null);
-
-  // Local angle inputs
-  const [pitchInput, setPitchInput] = useState<number>(35);
-  const [yawInput, setYawInput] = useState<number>(45);
-
-  // Sync inputs with main camera movement
-  useEffect(() => {
-    const unsubscribe = () => {
-      // Keep inputs somewhat in sync when user orbits
-      setPitchInput(cameraSyncState.pitchDeg);
-      setYawInput(cameraSyncState.yawDeg);
-    };
-    cameraSyncState.listeners.add(unsubscribe);
-    return () => {
-      cameraSyncState.listeners.delete(unsubscribe);
-    };
-  }, []);
-
-  const handleApplyAngles = (e?: React.FormEvent) => {
-    if (e) e.preventDefault();
-    snapCameraToAngles(Number(pitchInput), Number(yawInput));
-  };
 
   return (
     <div className="absolute top-4 right-4 z-30 flex flex-col items-end gap-2 pointer-events-auto">
-      {/* View Cube 3D Canvas Box */}
-      <div className="relative w-36 h-36 bg-industrial-900/90 backdrop-blur-md rounded-xl border border-slate-700/60 shadow-2xl p-1 flex items-center justify-center overflow-hidden group">
+      {/* View Cube 3D Canvas Box - Reduced by 20% to w-28 h-28 */}
+      <div className="relative w-28 h-28 bg-industrial-900/90 backdrop-blur-md rounded-xl border border-slate-700/60 shadow-2xl p-1 flex items-center justify-center overflow-hidden group">
         {/* Subtle coordinate label */}
-        <div className="absolute top-1.5 left-2 z-10 flex items-center gap-1 text-[10px] font-mono text-slate-400 select-none">
-          <Compass className="w-3 h-3 text-cyan-400 animate-spin" style={{ animationDuration: '10s' }} />
+        <div className="absolute top-1.5 left-2 z-10 flex items-center gap-1 text-[9px] font-mono text-slate-400 select-none">
+          <Compass className="w-2.5 h-2.5 text-cyan-400 animate-spin" style={{ animationDuration: '10s' }} />
           <span>NAV CUBE</span>
         </div>
 
         {/* Hovered Face Badge */}
         {hoveredFace && (
-          <div className="absolute bottom-1 left-2 z-10 text-[9px] font-mono font-bold text-cyan-300 bg-cyan-950/80 px-1.5 py-0.5 rounded border border-cyan-800">
+          <div className="absolute bottom-1 left-2 z-10 text-[8px] font-mono font-bold text-cyan-300 bg-cyan-950/80 px-1 py-0.5 rounded border border-cyan-800">
             {hoveredFace}
           </div>
         )}
@@ -178,7 +156,7 @@ export const ViewCube: React.FC = () => {
           title="Snap to Isometric View"
           className="absolute top-1.5 right-1.5 z-10 p-1 text-slate-400 hover:text-cyan-400 bg-slate-800/70 hover:bg-slate-700 rounded transition-all"
         >
-          <RotateCcw className="w-3 h-3" />
+          <RotateCcw className="w-2.5 h-2.5" />
         </button>
 
         {/* The Isolated Secondary Three.js Canvas */}
@@ -195,62 +173,6 @@ export const ViewCube: React.FC = () => {
             onFaceClick={(face) => snapCameraTo(face)}
           />
         </Canvas>
-      </div>
-
-      {/* Floating Precise Engineering Angle Inputs & Quick Snaps */}
-      <div className="bg-industrial-900/90 backdrop-blur-md rounded-xl border border-slate-700/60 shadow-xl p-2.5 w-48 text-xs font-mono text-slate-300">
-        <form onSubmit={handleApplyAngles} className="space-y-2">
-          <div className="flex items-center justify-between text-[11px] font-semibold text-slate-300 border-b border-slate-800 pb-1">
-            <span className="flex items-center gap-1.5">
-              <Eye className="w-3.5 h-3.5 text-cyan-400" />
-              <span>Camera Angle</span>
-            </span>
-            <button
-              type="submit"
-              className="text-[10px] bg-cyan-500/20 hover:bg-cyan-500/30 text-cyan-300 px-1.5 py-0.5 rounded border border-cyan-500/40 transition-colors"
-            >
-              Apply
-            </button>
-          </div>
-
-          <div className="grid grid-cols-2 gap-2">
-            <div>
-              <label className="text-[10px] text-slate-400 block mb-0.5">Pitch (°)</label>
-              <input
-                type="number"
-                min="-89"
-                max="89"
-                value={pitchInput}
-                onChange={(e) => setPitchInput(Number(e.target.value))}
-                className="w-full bg-slate-950/80 border border-slate-700 rounded px-1.5 py-1 text-slate-200 text-xs focus:outline-none focus:border-cyan-500"
-              />
-            </div>
-            <div>
-              <label className="text-[10px] text-slate-400 block mb-0.5">Yaw (°)</label>
-              <input
-                type="number"
-                min="-180"
-                max="180"
-                value={yawInput}
-                onChange={(e) => setYawInput(Number(e.target.value))}
-                className="w-full bg-slate-950/80 border border-slate-700 rounded px-1.5 py-1 text-slate-200 text-xs focus:outline-none focus:border-cyan-500"
-              />
-            </div>
-          </div>
-        </form>
-
-        {/* Quick Viewport Presets */}
-        <div className="grid grid-cols-4 gap-1 pt-2 border-t border-slate-800/80 mt-2">
-          {(['TOP', 'FRONT', 'LEFT', 'TUNNEL'] as const).map((view) => (
-            <button
-              key={view}
-              onClick={() => snapCameraTo(view)}
-              className="text-[9px] font-bold text-slate-400 hover:text-cyan-300 bg-slate-800/60 hover:bg-slate-800 py-1 rounded transition-colors text-center"
-            >
-              {view === 'TUNNEL' ? 'TUNL' : view}
-            </button>
-          ))}
-        </div>
       </div>
     </div>
   );
