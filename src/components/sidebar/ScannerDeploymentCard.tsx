@@ -247,7 +247,7 @@ export const ScannerDeploymentCard: React.FC = () => {
 
                             {/* Menu Card */}
                             <div
-                              className="absolute right-0 top-full mt-1 w-48 bg-slate-900 border border-slate-700/90 rounded-xl shadow-2xl z-50 py-1.5 text-[11px] font-medium text-slate-200 backdrop-blur-md"
+                              className="absolute right-0 top-full mt-1 w-52 bg-slate-900 border border-slate-700/90 rounded-xl shadow-2xl z-50 py-1.5 text-[11px] font-medium text-slate-200 backdrop-blur-md"
                               onClick={(e) => e.stopPropagation()}
                             >
                               {/* Scanner FOV Preset Section Header */}
@@ -268,43 +268,45 @@ export const ScannerDeploymentCard: React.FC = () => {
                                 </button>
                               </div>
 
-                              {/* Presets Selection List */}
-                              {scannerLibrary.length === 0 ? (
-                                <div className="px-2.5 py-2 text-slate-400 text-[10px]">
-                                  <p className="italic text-slate-400">Library is empty</p>
-                                  <button
-                                    type="button"
-                                    onClick={() => {
-                                      setOpenMenuScannerId(null);
-                                      setIsScannerLibraryOpen(true);
-                                    }}
-                                    className="text-cyan-400 hover:underline font-semibold block mt-1 cursor-pointer"
-                                  >
-                                    + Add in Library
-                                  </button>
-                                </div>
-                              ) : (
-                                <div className="max-h-40 overflow-y-auto py-1 space-y-0.5">
-                                  {scannerLibrary.map((preset) => (
+                              {/* Dropdown Selection for FOV Presets */}
+                              <div className="px-2.5 py-2">
+                                {scannerLibrary.length === 0 ? (
+                                  <div className="text-slate-400 text-[10px]">
+                                    <p className="italic text-slate-400">Library is empty</p>
                                     <button
-                                      key={preset.id}
                                       type="button"
-                                      disabled={scanner.isLocked}
                                       onClick={() => {
-                                        applyScannerPreset(scanner.id, preset.id);
                                         setOpenMenuScannerId(null);
+                                        setIsScannerLibraryOpen(true);
                                       }}
-                                      title={`Apply ${preset.name} (${preset.optical.horizontalFov}°×${preset.optical.verticalFov}°)`}
-                                      className="w-full px-2.5 py-1.5 text-left flex items-center justify-between hover:bg-slate-800 text-slate-200 hover:text-cyan-300 transition-colors group cursor-pointer"
+                                      className="text-cyan-400 hover:underline font-semibold block mt-1 cursor-pointer"
                                     >
-                                      <span className="truncate flex-1 font-medium">{preset.name}</span>
-                                      <span className="text-[9px] font-mono text-slate-400 group-hover:text-cyan-400 ml-1.5 flex-shrink-0">
-                                        {preset.optical.horizontalFov.toFixed(0)}°×{preset.optical.verticalFov.toFixed(0)}°
-                                      </span>
+                                      + Add in Library
                                     </button>
-                                  ))}
-                                </div>
-                              )}
+                                  </div>
+                                ) : (
+                                  <select
+                                    defaultValue=""
+                                    disabled={scanner.isLocked}
+                                    onChange={(e) => {
+                                      if (e.target.value) {
+                                        applyScannerPreset(scanner.id, e.target.value);
+                                        setOpenMenuScannerId(null);
+                                      }
+                                    }}
+                                    className="w-full bg-slate-950 border border-slate-700 hover:border-cyan-500/50 rounded-lg px-2 py-1.5 text-[11px] text-slate-200 focus:outline-none focus:border-cyan-400 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                                  >
+                                    <option value="" disabled>
+                                      Select Scanner Preset...
+                                    </option>
+                                    {scannerLibrary.map((preset) => (
+                                      <option key={preset.id} value={preset.id} className="bg-slate-900 text-slate-200">
+                                        {preset.name} ({preset.optical.horizontalFov.toFixed(0)}°×{preset.optical.verticalFov.toFixed(0)}°)
+                                      </option>
+                                    ))}
+                                  </select>
+                                )}
+                              </div>
 
                               <div className="my-1 border-t border-slate-800" />
 

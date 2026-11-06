@@ -40,7 +40,6 @@ export const ScannerLibraryModal: React.FC = () => {
 
   // Form State
   const [formName, setFormName] = useState('');
-  const [formDesc, setFormDesc] = useState('');
   const [fovMode, setFovMode] = useState<'angles' | 'twopoint'>('angles');
 
   // Direct Angle Specs
@@ -80,7 +79,6 @@ export const ScannerLibraryModal: React.FC = () => {
 
   const resetForm = () => {
     setFormName('');
-    setFormDesc('');
     setFovMode('angles');
     setHFov(58);
     setVFov(44);
@@ -103,7 +101,6 @@ export const ScannerLibraryModal: React.FC = () => {
   const handleStartEdit = (preset: ScannerLibraryPreset) => {
     setEditingId(preset.id);
     setFormName(preset.name);
-    setFormDesc(preset.description || '');
     setHFov(preset.optical.horizontalFov);
     setVFov(preset.optical.verticalFov);
     setDofNear(preset.optical.dofNear);
@@ -159,13 +156,11 @@ export const ScannerLibraryModal: React.FC = () => {
     if (viewMode === 'edit' && editingId) {
       updateScannerPreset(editingId, {
         name: formName.trim(),
-        description: formDesc.trim() || undefined,
         optical: opticalData
       });
     } else {
       addScannerPreset({
         name: formName.trim(),
-        description: formDesc.trim() || undefined,
         optical: opticalData
       });
     }
@@ -399,33 +394,18 @@ export const ScannerLibraryModal: React.FC = () => {
                 </button>
               </div>
 
-              {/* 1. Name & Description */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-xs font-semibold text-slate-300 mb-1">
-                    Scanner Model / Custom Name <span className="text-rose-400">*</span>
-                  </label>
-                  <input
-                    type="text"
-                    required
-                    placeholder="e.g. Keyence SR-5000 / Cognex DM370"
-                    value={formName}
-                    onChange={(e) => setFormName(e.target.value)}
-                    className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-cyan-400 text-xs"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-semibold text-slate-300 mb-1">
-                    Notes / Lens Description (Optional)
-                  </label>
-                  <input
-                    type="text"
-                    placeholder="e.g. Standard 16mm lens, wide FOV setup"
-                    value={formDesc}
-                    onChange={(e) => setFormDesc(e.target.value)}
-                    className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-cyan-400 text-xs"
-                  />
-                </div>
+              {/* 1. Scanner Model Name (Clean input, no placeholder, notes removed) */}
+              <div>
+                <label className="block text-xs font-semibold text-slate-300 mb-1">
+                  Scanner Model / Custom Name <span className="text-rose-400">*</span>
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={formName}
+                  onChange={(e) => setFormName(e.target.value)}
+                  className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-cyan-400 text-xs"
+                />
               </div>
 
               {/* 2. FIELD OF VIEW & FOCUS CONFIGURATION (Image 2) */}
