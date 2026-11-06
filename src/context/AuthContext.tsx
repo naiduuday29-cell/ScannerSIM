@@ -12,7 +12,8 @@ import {
   FirebaseUser
 } from '../services/firebase';
 import {
-  validateAndRedeemLicenseKey
+  validateAndRedeemLicenseKey,
+  getRedeemedLicenses
 } from '../services/licenseService';
 
 export type SubscriptionPlan = 'trial' | 'monthly' | 'half_yearly' | 'yearly';
@@ -56,8 +57,6 @@ interface AuthContextType {
   verificationCodeSent: string | null;
 }
 
-const STORAGE_KEY = 'scanner_sim_user_auth_v1';
-const PLAN_PREFIX = 'scanner_sim_user_plan_';
 const TRIAL_DAYS = 15;
 
 const DEFAULT_USER: UserProfile = {
@@ -72,6 +71,63 @@ const DEFAULT_USER: UserProfile = {
   trialDaysTotal: TRIAL_DAYS
 };
 
+const STORAGE_KEY = 'scanner_sim_auth_user';
+const PLAN_PREFIX = 'scanner_sim_plan_';
+const ACCOUNTS_DB_KEY = 'scanner_sim_accounts_registry_v2';
+
+// Retrieve all locally saved registered accounts
+export const getStoredAccounts = (): Record<string, UserProfile> => {
+  try {
+    const raw = localStorage.getItem(ACCOUNTS_DB_KEY);
+    if (raw) return JSON.parse(raw);
+  } catch (e) {
+    console.warn('Failed to parse accounts registry:', e);
+  }
+  return {};
+};
+
+// Save or update an account permanently in the registry
+export const saveAccountToDb = (acc: UserProfile) => {
+  try {
+    const accounts = getStoredAccounts();
+    const normEmail = acc.email.toLowerCase().trim();
+    accounts[normEmail] = {
+      ...acc,
+      email: normEmail
+    };
+    localStorage.setItem(ACCOUNTS_DB_KEY, JSON.stringify(accounts));
+  } catch (e) {
+    console.warn('Failed to save account to registry:', e);
+  }
+};
+
+// Cross-reference account with any redeemed single-account license
+export const syncAccountWithLicenses = (acc: UserProfile): UserProfile => {
+  const normEmail = acc.email.toLowerCase().trim();
+  const redeemed = getRedeemedLicenses();
+  
+  // Find any active or historical license bound to this email
+  const matchingLicense = Object.values(redeemed).find(
+    (rec) => rec.boundToEmail.toLowerCase().trim() === normEmail
+  );
+
+  if (matchingLicense) {
+    const redeemedTimeMs = new Date(matchingLicense.redeemedAt).getTime();
+    const expiryTimeMs = redeemedTimeMs + matchingLicense.durationDays * 24 * 60 * 60 * 1000;
+    
+    return {
+      ...acc,
+      plan: matchingLicense.plan,
+      activeLicenseKey: matchingLicense.licenseKey,
+      licenseDurationDays: matchingLicense.durationDays,
+      licenseExpiresAt: new Date(expiryTimeMs).toISOString(),
+      planActivatedAt: matchingLicense.redeemedAt
+    };
+  }
+
+  return acc;
+};
+
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
@@ -83,12 +139,15 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       if (saved) {
         const parsed = JSON.parse(saved);
         if (parsed && parsed.id && parsed.email) {
-          // Backward compatibility: ensures future site updates never corrupt or reset existing user data
+          const accounts = getStoredAccounts();
+          const normEmail = parsed.email.toLowerCase().trim();
+          const current = accounts[normEmail] || parsed;
+          const synced = syncAccountWithLicenses(current);
           return {
-            ...parsed,
-            trialDaysTotal: parsed.trialDaysTotal || TRIAL_DAYS,
-            plan: parsed.plan || 'trial',
-            registeredAt: parsed.registeredAt || new Date().toISOString()
+            ...synced,
+            trialDaysTotal: synced.trialDaysTotal || TRIAL_DAYS,
+            plan: synced.plan || 'trial',
+            registeredAt: synced.registeredAt || new Date().toISOString()
           };
         }
       }
@@ -108,35 +167,29 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
     const unsubscribe = onAuthStateChanged(auth, async (fbUser: FirebaseUser | null) => {
       if (fbUser) {
-        // Load plan for this UID
-        let planData: any = null;
-        try {
-          const raw = localStorage.getItem(`${PLAN_PREFIX}${fbUser.uid}`);
-          if (raw) planData = JSON.parse(raw);
-        } catch (e) {
-          console.warn('Failed to read plan from storage:', e);
-        }
+        const normEmail = (fbUser.email || '').toLowerCase().trim();
+        const accounts = getStoredAccounts();
+        const localData = accounts[normEmail];
 
-        const registeredAt = planData?.registeredAt || fbUser.metadata.creationTime || new Date().toISOString();
-        const plan: SubscriptionPlan = planData?.plan || 'trial';
-        const planActivatedAt = planData?.planActivatedAt || registeredAt;
-
-        const profile: UserProfile = {
+        const registeredAt = localData?.registeredAt || fbUser.metadata.creationTime || new Date().toISOString();
+        const rawProfile: UserProfile = {
           id: fbUser.uid,
-          name: fbUser.displayName || fbUser.email?.split('@')[0] || 'Engineer',
-          email: fbUser.email || '',
-          company: planData?.company || 'Vision Systems',
+          name: fbUser.displayName || localData?.name || normEmail.split('@')[0] || 'Engineer',
+          email: normEmail,
+          company: localData?.company || 'Vision Systems',
           isEmailVerified: fbUser.emailVerified,
           registeredAt,
-          plan,
-          planActivatedAt,
+          plan: localData?.plan || 'trial',
+          planActivatedAt: localData?.planActivatedAt || registeredAt,
           trialDaysTotal: TRIAL_DAYS,
-          activeLicenseKey: planData?.activeLicenseKey,
-          licenseDurationDays: planData?.licenseDurationDays,
-          licenseExpiresAt: planData?.licenseExpiresAt
+          activeLicenseKey: localData?.activeLicenseKey,
+          licenseDurationDays: localData?.licenseDurationDays,
+          licenseExpiresAt: localData?.licenseExpiresAt
         };
 
-        setUser(profile);
+        const syncedProfile = syncAccountWithLicenses(rawProfile);
+        saveAccountToDb(syncedProfile);
+        setUser(syncedProfile);
       } else {
         // Firebase signed out
         if (localStorage.getItem('scanner_sim_firebase_active_session')) {
@@ -152,6 +205,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   // Persist user to localStorage whenever it changes
   useEffect(() => {
     if (user) {
+      saveAccountToDb(user);
       localStorage.setItem(STORAGE_KEY, JSON.stringify(user));
       // Also persist user's subscription plan keyed by id
       localStorage.setItem(`${PLAN_PREFIX}${user.id}`, JSON.stringify({
@@ -210,12 +264,14 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       return { success: false, error: 'Please enter a valid email address.' };
     }
 
+    const normEmail = email.toLowerCase().trim();
+
     if (isFirebaseActive && auth) {
       try {
         if (!password) {
           return { success: false, error: 'Password is required to sign in.' };
         }
-        const userCredential = await signInWithEmailAndPassword(auth, email.trim(), password);
+        const userCredential = await signInWithEmailAndPassword(auth, normEmail, password);
         localStorage.setItem('scanner_sim_firebase_active_session', 'true');
 
         if (!userCredential.user.emailVerified) {
@@ -237,20 +293,33 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       }
     }
 
-    // Local Simulation Fallback
-    const newUser: UserProfile = {
-      id: `usr_${Date.now()}`,
-      name: email.split('@')[0].replace(/[._]/g, ' '),
-      email,
-      company: 'Enterprise Logistics',
-      isEmailVerified: true,
-      registeredAt: new Date().toISOString(),
-      plan: 'trial',
-      planActivatedAt: new Date().toISOString(),
-      trialDaysTotal: TRIAL_DAYS
-    };
+    // Local / Offline Persistent Sign-In Flow
+    const accounts = getStoredAccounts();
+    const existing = accounts[normEmail];
 
-    setUser(newUser);
+    let resolvedProfile: UserProfile;
+
+    if (existing) {
+      // Existing registered account recognized! Sync with any active redeemed license
+      resolvedProfile = syncAccountWithLicenses(existing);
+    } else {
+      // Initialize account in registry
+      const rawUser: UserProfile = {
+        id: `usr_${Date.now()}`,
+        name: normEmail.split('@')[0].replace(/[._]/g, ' '),
+        email: normEmail,
+        company: 'Vision Systems Engineering',
+        isEmailVerified: true,
+        registeredAt: new Date().toISOString(),
+        plan: 'trial',
+        planActivatedAt: new Date().toISOString(),
+        trialDaysTotal: TRIAL_DAYS
+      };
+      resolvedProfile = syncAccountWithLicenses(rawUser);
+    }
+
+    saveAccountToDb(resolvedProfile);
+    setUser(resolvedProfile);
     return { success: true };
   };
 
@@ -266,6 +335,20 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     }
     if (!name.trim()) {
       return { success: false, requiresVerification: false, error: 'Please enter your name.' };
+    }
+
+    const normEmail = email.toLowerCase().trim();
+
+    // Check if account is already registered in local database
+    if (!isFirebaseActive) {
+      const accounts = getStoredAccounts();
+      if (accounts[normEmail]) {
+        return {
+          success: false,
+          requiresVerification: false,
+          error: `An account for ${normEmail} is already registered. Please sign in via the Login button instead.`
+        };
+      }
     }
 
     if (isFirebaseActive && auth) {
@@ -380,6 +463,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       planActivatedAt: new Date().toISOString()
     };
 
+    saveAccountToDb(updatedUser);
     setUser(updatedUser);
     return {
       success: true,
@@ -394,19 +478,28 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       return { success: false, error: 'Invalid 6-digit verification code. Please check and try again.' };
     }
 
-    const newUser: UserProfile = {
-      id: `usr_${Date.now()}`,
-      name: pendingUserData?.name || 'Authorized Engineer',
-      email: pendingEmail || 'engineer@company.com',
-      company: pendingUserData?.company || 'Vision Systems Inc',
+    const normEmail = (pendingEmail || 'engineer@company.com').toLowerCase().trim();
+    const accounts = getStoredAccounts();
+    const existing = accounts[normEmail];
+
+    const rawUser: UserProfile = {
+      id: existing?.id || `usr_${Date.now()}`,
+      name: pendingUserData?.name || existing?.name || normEmail.split('@')[0].replace(/[._]/g, ' '),
+      email: normEmail,
+      company: pendingUserData?.company || existing?.company || 'Vision Systems Inc',
       isEmailVerified: true,
-      registeredAt: new Date().toISOString(),
-      plan: 'trial',
-      planActivatedAt: new Date().toISOString(),
-      trialDaysTotal: TRIAL_DAYS
+      registeredAt: existing?.registeredAt || new Date().toISOString(),
+      plan: existing?.plan || 'trial',
+      planActivatedAt: existing?.planActivatedAt || new Date().toISOString(),
+      trialDaysTotal: TRIAL_DAYS,
+      activeLicenseKey: existing?.activeLicenseKey,
+      licenseDurationDays: existing?.licenseDurationDays,
+      licenseExpiresAt: existing?.licenseExpiresAt
     };
 
-    setUser(newUser);
+    const finalUser = syncAccountWithLicenses(rawUser);
+    saveAccountToDb(finalUser);
+    setUser(finalUser);
     setPendingEmail(null);
     setPendingUserData(null);
     setVerificationCodeSent(null);

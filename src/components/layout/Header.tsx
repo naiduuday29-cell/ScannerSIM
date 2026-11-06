@@ -221,18 +221,6 @@ export const Header: React.FC = () => {
             <span>Report</span>
           </button>
 
-          {/* Pricing Quick Button */}
-          <button
-            onClick={() => openUserProfile('pricing')}
-            title="View Pricing Plans: $30/mo, $120/6mo, $199/yr"
-            className="p-1.5 sm:px-2.5 sm:py-1 rounded-lg bg-gradient-to-r from-amber-500/20 to-orange-500/20 hover:from-amber-500/30 hover:to-orange-500/30 text-amber-300 text-xs font-semibold flex items-center gap-1.5 border border-amber-500/40 shadow-sm transition-all cursor-pointer active:scale-95"
-          >
-            <Sparkles className="w-3.5 h-3.5 text-amber-400" />
-            <span className="hidden md:inline">Pricing</span>
-          </button>
-
-          <div className="h-6 w-px bg-slate-800 mx-0.5 hidden sm:block" />
-
           {/* USER DETAILS / AUTH BUTTON (Top-Right Corner) */}
           {isAuthenticated && user ? (
             <div className="relative" ref={userMenuRef}>
@@ -248,9 +236,12 @@ export const Header: React.FC = () => {
                 }`} />
               </button>
 
-              {/* Dropdown Menu (Image 3: Account, Pricing, Sign Out) */}
+              {/* Dropdown Menu (Image 3: Account, Pricing, Sign Out - 100% Opaque Solid Background) */}
               {isUserMenuOpen && (
-                <div className="absolute right-0 top-full mt-2 w-64 bg-slate-900/98 border border-slate-700/80 rounded-2xl shadow-2xl p-2 z-50 animate-in fade-in zoom-in-95 duration-150 font-sans">
+                <div
+                  style={{ backgroundColor: '#0f172a' }}
+                  className="absolute right-0 top-full mt-2 w-64 bg-slate-900 border border-slate-700/90 rounded-2xl shadow-2xl p-2 z-50 animate-in fade-in zoom-in-95 duration-150 font-sans"
+                >
                   
                   {/* Header: Avatar + User Name & Email */}
                   <div className="p-2.5 flex items-center gap-3 border-b border-slate-800">
