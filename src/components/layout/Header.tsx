@@ -135,23 +135,15 @@ export const Header: React.FC = () => {
   return (
     <>
       <header className="h-14 bg-industrial-900/95 border-b border-slate-800/80 px-4 flex items-center justify-between z-40 select-none shadow-md">
-        {/* Brand & Subtitle */}
+        {/* Brand */}
         <div className="flex items-center gap-3">
           <div className="w-9 h-9 rounded-lg bg-gradient-to-br from-cyan-500 to-blue-600 flex items-center justify-center shadow-lg shadow-cyan-500/20">
             <Scan className="w-5 h-5 text-white" />
           </div>
-          <div>
-            <div className="flex items-center gap-2">
-              <span className="font-extrabold text-sm tracking-wider text-slate-100 font-mono">
-                SCANNER<span className="text-cyan-400">SIM</span>
-              </span>
-              <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-cyan-950/80 text-cyan-400 border border-cyan-800 font-semibold">
-                ENTERPRISE 3D
-              </span>
-            </div>
-            <p className="text-[11px] text-slate-400 hidden sm:block">
-              Multi-Scanner Array & Motion Coverage Validation Studio
-            </p>
+          <div className="flex items-center">
+            <span className="font-extrabold text-base tracking-wider text-slate-100 font-mono">
+              SCANNER<span className="text-cyan-400">SIM</span>
+            </span>
           </div>
         </div>
 
