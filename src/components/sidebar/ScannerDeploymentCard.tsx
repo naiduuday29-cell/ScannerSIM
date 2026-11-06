@@ -10,6 +10,7 @@ import {
   Crosshair,
   Calculator,
   GripVertical,
+  MoreVertical,
   Lock,
   Unlock
 } from 'lucide-react';
@@ -39,6 +40,8 @@ export const ScannerDeploymentCard: React.FC = () => {
   // Drag and drop reordering state
   const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
   const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
+  // 3-dots dropdown menu state
+  const [openMenuScannerId, setOpenMenuScannerId] = useState<string | null>(null);
   // Input mode per scanner: 'angles' (default) or 'twopoint' (2-distance capture area)
   const [fovInputMode, setFovInputMode] = useState<Record<string, 'angles' | 'twopoint'>>({});
 
@@ -205,58 +208,113 @@ export const ScannerDeploymentCard: React.FC = () => {
                           scanner.isLocked ? 'text-slate-400 cursor-not-allowed' : 'text-slate-200'
                         }`}
                       />
+
+                      {/* Locked subtle indicator icon */}
+                      {scanner.isLocked && (
+                        <span title="Scanner settings are locked" className="flex-shrink-0 flex items-center">
+                          <Lock className="w-3 h-3 text-amber-400" />
+                        </span>
+                      )}
                     </div>
 
-                    {/* Action Icons: Lock, Duplicate, Delete, Expand */}
+                    {/* Action Icons: 3-Dots Dropdown Menu & Expand Chevron */}
                     <div className="flex items-center gap-1">
-                      {/* Lock / Unlock Toggle */}
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          updateScanner(scanner.id, { isLocked: !scanner.isLocked });
-                        }}
-                        title={
-                          scanner.isLocked
-                            ? 'Scanner settings are locked against accidental changes. Click to unlock.'
-                            : 'Lock scanner settings to prevent accidental changes'
-                        }
-                        className={`p-1 rounded transition-colors ${
-                          scanner.isLocked
-                            ? 'text-amber-400 bg-amber-500/15 border border-amber-500/40 hover:bg-amber-500/25 shadow-sm'
-                            : 'text-slate-400 hover:text-amber-300 hover:bg-slate-800'
-                        }`}
-                      >
-                        {scanner.isLocked ? <Lock className="w-3.5 h-3.5" /> : <Unlock className="w-3.5 h-3.5" />}
-                      </button>
+                      {/* Vertical 3-Dots Menu */}
+                      <div className="relative">
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setOpenMenuScannerId(openMenuScannerId === scanner.id ? null : scanner.id);
+                          }}
+                          title="Scanner options"
+                          className={`p-1 rounded transition-colors ${
+                            openMenuScannerId === scanner.id
+                              ? 'text-cyan-300 bg-slate-800'
+                              : scanner.isLocked
+                              ? 'text-amber-400 hover:text-amber-300 hover:bg-slate-800'
+                              : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800'
+                          }`}
+                        >
+                          <MoreVertical className="w-3.5 h-3.5" />
+                        </button>
 
-                      {/* Duplicate */}
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          duplicateScanner(scanner.id);
-                        }}
-                        title="Duplicate scanner"
-                        className="p-1 text-slate-400 hover:text-cyan-300 rounded hover:bg-slate-800 transition-colors"
-                      >
-                        <Copy className="w-3.5 h-3.5" />
-                      </button>
+                        {/* Dropdown List Card */}
+                        {openMenuScannerId === scanner.id && (
+                          <>
+                            {/* Backdrop to capture outside clicks */}
+                            <div
+                              className="fixed inset-0 z-40 cursor-default"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setOpenMenuScannerId(null);
+                              }}
+                            />
 
-                      {/* Delete */}
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          removeScanner(scanner.id);
-                        }}
-                        disabled={scanner.isLocked}
-                        title={scanner.isLocked ? 'Scanner is locked. Unlock before deleting.' : 'Delete scanner'}
-                        className={`p-1 rounded transition-colors ${
-                          scanner.isLocked
-                            ? 'text-slate-600 opacity-40 cursor-not-allowed'
-                            : 'text-slate-400 hover:text-rose-400 hover:bg-slate-800'
-                        }`}
-                      >
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </button>
+                            {/* Menu Card */}
+                            <div
+                              className="absolute right-0 top-full mt-1 w-40 bg-slate-900 border border-slate-700/90 rounded-lg shadow-2xl z-50 py-1 text-[11px] font-medium text-slate-200 backdrop-blur-md"
+                              onClick={(e) => e.stopPropagation()}
+                            >
+                              {/* Lock / Unlock Toggle */}
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  updateScanner(scanner.id, { isLocked: !scanner.isLocked });
+                                  setOpenMenuScannerId(null);
+                                }}
+                                className="w-full px-2.5 py-1.5 text-left flex items-center gap-2 hover:bg-slate-800 text-slate-200 hover:text-cyan-300 transition-colors"
+                              >
+                                {scanner.isLocked ? (
+                                  <>
+                                    <Unlock className="w-3.5 h-3.5 text-amber-400 flex-shrink-0" />
+                                    <span className="text-amber-300 font-semibold">Unlock Settings</span>
+                                  </>
+                                ) : (
+                                  <>
+                                    <Lock className="w-3.5 h-3.5 text-slate-400 flex-shrink-0" />
+                                    <span>Lock Settings</span>
+                                  </>
+                                )}
+                              </button>
+
+                              {/* Duplicate */}
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  duplicateScanner(scanner.id);
+                                  setOpenMenuScannerId(null);
+                                }}
+                                className="w-full px-2.5 py-1.5 text-left flex items-center gap-2 hover:bg-slate-800 text-slate-200 hover:text-cyan-300 transition-colors"
+                              >
+                                <Copy className="w-3.5 h-3.5 text-slate-400 flex-shrink-0" />
+                                <span>Duplicate</span>
+                              </button>
+
+                              <div className="my-1 border-t border-slate-800" />
+
+                              {/* Delete */}
+                              <button
+                                type="button"
+                                disabled={scanner.isLocked}
+                                onClick={() => {
+                                  removeScanner(scanner.id);
+                                  setOpenMenuScannerId(null);
+                                }}
+                                title={scanner.isLocked ? 'Unlock scanner before deleting' : 'Delete scanner'}
+                                className={`w-full px-2.5 py-1.5 text-left flex items-center gap-2 transition-colors ${
+                                  scanner.isLocked
+                                    ? 'opacity-40 text-slate-500 cursor-not-allowed'
+                                    : 'text-rose-400 hover:bg-rose-950/40 hover:text-rose-300'
+                                }`}
+                              >
+                                <Trash2 className="w-3.5 h-3.5 flex-shrink-0" />
+                                <span>Delete</span>
+                              </button>
+                            </div>
+                          </>
+                        )}
+                      </div>
 
                       {/* Expand / Collapse Chevron */}
                       <button
