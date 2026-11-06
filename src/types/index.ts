@@ -93,6 +93,7 @@ export interface Scanner {
   id: string;
   name: string;
   isActive: boolean;
+  isLocked?: boolean; // When true, settings are protected from accidental modifications
   position: {
     x: number; // relative to conveyor center (m)
     y: number; // relative to conveyor surface (m)

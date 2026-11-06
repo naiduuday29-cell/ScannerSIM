@@ -8,7 +8,11 @@ import {
   Eye,
   EyeOff,
   Crosshair,
-  Calculator
+  Calculator,
+  ArrowUp,
+  ArrowDown,
+  Lock,
+  Unlock
 } from 'lucide-react';
 import { useSimulator } from '../../context/SimulatorContext';
 import { NumberSliderInput } from '../common/NumberSliderInput';
@@ -24,7 +28,8 @@ export const ScannerDeploymentCard: React.FC = () => {
     addScanner,
     updateScanner,
     removeScanner,
-    duplicateScanner
+    duplicateScanner,
+    moveScanner
   } = useSimulator();
 
   // Collapsed at opening as requested
@@ -100,7 +105,7 @@ export const ScannerDeploymentCard: React.FC = () => {
               No scanners deployed. Click "+ Add Scanner" to begin array layout.
             </div>
           ) : (
-            scanners.map((scanner) => {
+            scanners.map((scanner, index) => {
               const isExpanded = expandedScannerId === scanner.id;
               const isSelected = selectedScannerId === scanner.id;
 
@@ -143,14 +148,72 @@ export const ScannerDeploymentCard: React.FC = () => {
                       <input
                         type="text"
                         value={scanner.name}
+                        disabled={scanner.isLocked}
                         onClick={(e) => e.stopPropagation()}
                         onChange={(e) => updateScanner(scanner.id, { name: e.target.value })}
-                        className="bg-transparent text-xs font-semibold text-slate-200 focus:outline-none focus:border-b border-cyan-400 truncate w-full"
+                        className={`bg-transparent text-xs font-semibold focus:outline-none focus:border-b border-cyan-400 truncate w-full ${
+                          scanner.isLocked ? 'text-slate-400 cursor-not-allowed' : 'text-slate-200'
+                        }`}
                       />
+
+                      {/* Locked badge indicator */}
+                      {scanner.isLocked && (
+                        <span className="text-[9px] font-mono font-bold px-1.5 py-0.2 rounded bg-amber-500/20 text-amber-300 border border-amber-500/40 flex items-center gap-1 flex-shrink-0">
+                          <Lock className="w-2.5 h-2.5" />
+                          LOCKED
+                        </span>
+                      )}
                     </div>
 
-                    {/* Action Icons */}
+                    {/* Action Icons: Reorder, Lock, Duplicate, Delete, Expand */}
                     <div className="flex items-center gap-1">
+                      {/* Reorder: Move Up */}
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          moveScanner(scanner.id, 'up');
+                        }}
+                        disabled={index === 0}
+                        title={index === 0 ? 'First in order' : 'Move scanner up in array'}
+                        className="p-1 text-slate-400 hover:text-cyan-300 disabled:opacity-20 disabled:hover:text-slate-400 rounded hover:bg-slate-800 transition-colors"
+                      >
+                        <ArrowUp className="w-3.5 h-3.5" />
+                      </button>
+
+                      {/* Reorder: Move Down */}
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          moveScanner(scanner.id, 'down');
+                        }}
+                        disabled={index === scanners.length - 1}
+                        title={index === scanners.length - 1 ? 'Last in order' : 'Move scanner down in array'}
+                        className="p-1 text-slate-400 hover:text-cyan-300 disabled:opacity-20 disabled:hover:text-slate-400 rounded hover:bg-slate-800 transition-colors"
+                      >
+                        <ArrowDown className="w-3.5 h-3.5" />
+                      </button>
+
+                      {/* Lock / Unlock Toggle to Prevent Accidental Changes */}
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          updateScanner(scanner.id, { isLocked: !scanner.isLocked });
+                        }}
+                        title={
+                          scanner.isLocked
+                            ? 'Scanner settings are locked against accidental changes. Click to unlock.'
+                            : 'Lock scanner settings to prevent accidental changes'
+                        }
+                        className={`p-1 rounded transition-colors ${
+                          scanner.isLocked
+                            ? 'text-amber-400 bg-amber-500/15 border border-amber-500/40 hover:bg-amber-500/25 shadow-sm'
+                            : 'text-slate-400 hover:text-amber-300 hover:bg-slate-800'
+                        }`}
+                      >
+                        {scanner.isLocked ? <Lock className="w-3.5 h-3.5" /> : <Unlock className="w-3.5 h-3.5" />}
+                      </button>
+
+                      {/* Duplicate */}
                       <button
                         onClick={(e) => {
                           e.stopPropagation();
@@ -161,16 +224,25 @@ export const ScannerDeploymentCard: React.FC = () => {
                       >
                         <Copy className="w-3.5 h-3.5" />
                       </button>
+
+                      {/* Delete */}
                       <button
                         onClick={(e) => {
                           e.stopPropagation();
                           removeScanner(scanner.id);
                         }}
-                        title="Delete scanner"
-                        className="p-1 text-slate-400 hover:text-rose-400 rounded hover:bg-slate-800 transition-colors"
+                        disabled={scanner.isLocked}
+                        title={scanner.isLocked ? 'Scanner is locked. Unlock before deleting.' : 'Delete scanner'}
+                        className={`p-1 rounded transition-colors ${
+                          scanner.isLocked
+                            ? 'text-slate-600 opacity-40 cursor-not-allowed'
+                            : 'text-slate-400 hover:text-rose-400 hover:bg-slate-800'
+                        }`}
                       >
                         <Trash2 className="w-3.5 h-3.5" />
                       </button>
+
+                      {/* Expand / Collapse Chevron */}
                       <button
                         onClick={(e) => toggleExpand(scanner.id, e)}
                         className="p-1 text-slate-400 hover:text-slate-200 rounded hover:bg-slate-800 transition-colors"
@@ -183,6 +255,23 @@ export const ScannerDeploymentCard: React.FC = () => {
                   {/* Expanded Parameter Sliders + Exact Number Inputs */}
                   {isExpanded && (
                     <div className="p-3 pt-2 space-y-3.5 border-t border-slate-800/80 bg-slate-950/40 text-[11px]">
+                      {/* Lock Notification Banner when locked */}
+                      {scanner.isLocked && (
+                        <div className="p-2.5 rounded-lg bg-amber-950/40 border border-amber-500/40 text-amber-200 flex items-center justify-between text-[11px] font-mono shadow-sm">
+                          <div className="flex items-center gap-2">
+                            <Lock className="w-3.5 h-3.5 text-amber-400 flex-shrink-0" />
+                            <span>Settings are <strong>Locked</strong> against accidental edits</span>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => updateScanner(scanner.id, { isLocked: false })}
+                            className="px-2 py-0.5 rounded bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 font-bold border border-amber-500/40 transition-colors cursor-pointer text-[10px]"
+                          >
+                            Unlock
+                          </button>
+                        </div>
+                      )}
+
                       {/* POSITION SECTION */}
                       <div className="space-y-2">
                         <div className="font-semibold text-cyan-400 flex items-center justify-between text-[11px] border-b border-slate-800 pb-0.5">
@@ -199,6 +288,7 @@ export const ScannerDeploymentCard: React.FC = () => {
                           min={-posRange}
                           max={posRange}
                           step={posStep}
+                          disabled={scanner.isLocked}
                           accentColor="accent-cyan-400"
                           onChange={(val) => {
                             updateScanner(scanner.id, {
@@ -216,6 +306,7 @@ export const ScannerDeploymentCard: React.FC = () => {
                           min={dimUnit === 'mm' ? -800 : dimUnit === 'in' ? -32 : -0.8}
                           max={dimUnit === 'mm' ? 2400 : dimUnit === 'in' ? 95 : 2.4}
                           step={posStep}
+                          disabled={scanner.isLocked}
                           accentColor="accent-cyan-400"
                           onChange={(val) => {
                             updateScanner(scanner.id, {
@@ -233,6 +324,7 @@ export const ScannerDeploymentCard: React.FC = () => {
                           min={-posRange}
                           max={posRange}
                           step={posStep}
+                          disabled={scanner.isLocked}
                           accentColor="accent-cyan-400"
                           onChange={(val) => {
                             updateScanner(scanner.id, {
@@ -259,6 +351,7 @@ export const ScannerDeploymentCard: React.FC = () => {
                           max={90}
                           step={1}
                           precision={0}
+                          disabled={scanner.isLocked}
                           accentColor="accent-emerald-400"
                           onChange={(val) => {
                             updateScanner(scanner.id, {
@@ -277,6 +370,7 @@ export const ScannerDeploymentCard: React.FC = () => {
                           max={180}
                           step={1}
                           precision={0}
+                          disabled={scanner.isLocked}
                           accentColor="accent-emerald-400"
                           onChange={(val) => {
                             updateScanner(scanner.id, {
@@ -295,6 +389,7 @@ export const ScannerDeploymentCard: React.FC = () => {
                           max={180}
                           step={1}
                           precision={0}
+                          disabled={scanner.isLocked}
                           accentColor="accent-emerald-400"
                           onChange={(val) => {
                             updateScanner(scanner.id, {
@@ -309,9 +404,12 @@ export const ScannerDeploymentCard: React.FC = () => {
                         <div className="flex items-center justify-between text-[11px] border-b border-slate-800 pb-1">
                           <span className="font-semibold text-amber-400">Field of View & Focus</span>
                           {/* Segmented Mode Switch */}
-                          <div className="flex items-center bg-slate-950 p-0.5 rounded-lg border border-slate-800 text-[10px] font-mono">
+                          <div className={`flex items-center bg-slate-950 p-0.5 rounded-lg border border-slate-800 text-[10px] font-mono ${
+                            scanner.isLocked ? 'opacity-50 pointer-events-none' : ''
+                          }`}>
                             <button
                               type="button"
+                              disabled={scanner.isLocked}
                               onClick={() => setFovInputMode(prev => ({ ...prev, [scanner.id]: 'angles' }))}
                               className={`px-2 py-0.5 rounded transition-all cursor-pointer ${
                                 (fovInputMode[scanner.id] || (scanner.optical.twoPointCalibration?.enabled ? 'twopoint' : 'angles')) === 'angles'
@@ -323,6 +421,7 @@ export const ScannerDeploymentCard: React.FC = () => {
                             </button>
                             <button
                               type="button"
+                              disabled={scanner.isLocked}
                               onClick={() => setFovInputMode(prev => ({ ...prev, [scanner.id]: 'twopoint' }))}
                               className={`px-2 py-0.5 rounded transition-all flex items-center gap-1 cursor-pointer ${
                                 (fovInputMode[scanner.id] || (scanner.optical.twoPointCalibration?.enabled ? 'twopoint' : 'angles')) === 'twopoint'
@@ -349,6 +448,7 @@ export const ScannerDeploymentCard: React.FC = () => {
                               max={85}
                               step={1}
                               precision={1}
+                              disabled={scanner.isLocked}
                               accentColor="accent-amber-400"
                               onChange={(val) => {
                                 updateScanner(scanner.id, {
@@ -367,6 +467,7 @@ export const ScannerDeploymentCard: React.FC = () => {
                               max={70}
                               step={1}
                               precision={1}
+                              disabled={scanner.isLocked}
                               accentColor="accent-amber-400"
                               onChange={(val) => {
                                 updateScanner(scanner.id, {
@@ -380,6 +481,7 @@ export const ScannerDeploymentCard: React.FC = () => {
                           <TwoPointFovCalculator
                             scanner={scanner}
                             dimUnit={dimUnit}
+                            disabled={scanner.isLocked}
                             onApply={({ horizontalFov, verticalFov, dofNear, dofFar, calibrationData }) => {
                               updateScanner(scanner.id, {
                                 optical: {
@@ -404,6 +506,7 @@ export const ScannerDeploymentCard: React.FC = () => {
                           min={dimUnit === 'mm' ? 100 : dimUnit === 'in' ? 4 : 0.1}
                           max={dofNearMax}
                           step={posStep}
+                          disabled={scanner.isLocked}
                           accentColor="accent-rose-400"
                           onChange={(val) => {
                             updateScanner(scanner.id, {
@@ -421,6 +524,7 @@ export const ScannerDeploymentCard: React.FC = () => {
                           min={dimUnit === 'mm' ? 300 : dimUnit === 'in' ? 12 : 0.3}
                           max={dofFarMax}
                           step={posStep}
+                          disabled={scanner.isLocked}
                           accentColor="accent-emerald-400"
                           onChange={(val) => {
                             updateScanner(scanner.id, {

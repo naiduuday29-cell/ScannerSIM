@@ -302,15 +302,10 @@ export const Header: React.FC = () => {
                         setIsUserMenuOpen(false);
                         openUserProfile('pricing');
                       }}
-                      className="w-full px-3 py-2 rounded-xl text-left text-xs font-medium text-slate-200 hover:text-white hover:bg-slate-800/80 flex items-center justify-between transition-colors cursor-pointer"
+                      className="w-full px-3 py-2 rounded-xl text-left text-xs font-medium text-slate-200 hover:text-white hover:bg-slate-800/80 flex items-center gap-2.5 transition-colors cursor-pointer"
                     >
-                      <div className="flex items-center gap-2.5">
-                        <Sparkles className="w-4 h-4 text-amber-400" />
-                        <span>Pricing</span>
-                      </div>
-                      <span className="text-[10px] font-mono text-amber-400/90 bg-amber-500/10 px-1.5 py-0.5 rounded border border-amber-500/30">
-                        Plans & Keys
-                      </span>
+                      <Sparkles className="w-4 h-4 text-amber-400" />
+                      <span>Pricing</span>
                     </button>
                   </div>
 

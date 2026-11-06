@@ -7,6 +7,7 @@ import { calculateFovFromTwoDistancePoints } from '../../utils/math3d';
 interface TwoPointFovCalculatorProps {
   scanner: Scanner;
   dimUnit: DimensionUnit;
+  disabled?: boolean;
   onApply: (params: {
     horizontalFov: number;
     verticalFov: number;
@@ -19,6 +20,7 @@ interface TwoPointFovCalculatorProps {
 export const TwoPointFovCalculator: React.FC<TwoPointFovCalculatorProps> = ({
   scanner,
   dimUnit,
+  disabled = false,
   onApply
 }) => {
   // Existing calibration or compute defaults from current angles & DOF
@@ -109,7 +111,9 @@ export const TwoPointFovCalculator: React.FC<TwoPointFovCalculatorProps> = ({
   }, [d1, w1, h1, d2, w2, h2, dimUnit, calcResult.isValid, calcResult.horizontalFovDeg, calcResult.verticalFovDeg]);
 
   return (
-    <div className="bg-slate-950/80 rounded-xl border border-cyan-500/30 p-2.5 space-y-2.5 text-xs">
+    <div className={`bg-slate-950/80 rounded-xl border border-cyan-500/30 p-2.5 space-y-2.5 text-xs transition-opacity ${
+      disabled ? 'opacity-50 pointer-events-none select-none' : ''
+    }`}>
       {/* Near distance */}
       <div className="bg-slate-900/70 p-2.5 rounded-lg border border-slate-800 space-y-1.5">
         <div className="flex items-center justify-between">

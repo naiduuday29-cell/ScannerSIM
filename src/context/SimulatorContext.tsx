@@ -52,6 +52,8 @@ interface SimulatorContextType {
   updateScanner: (id: string, updates: Partial<Scanner>) => void;
   removeScanner: (id: string) => void;
   duplicateScanner: (id: string) => void;
+  moveScanner: (id: string, direction: 'up' | 'down') => void;
+  reorderScanners: (fromIndex: number, toIndex: number) => void;
   loadPreset: (presetName: string) => void;
 
   // Motion simulation
@@ -298,6 +300,8 @@ export const SimulatorProvider: React.FC<{ children: ReactNode }> = ({ children 
   const updateScanner = useCallback((id: string, updates: Partial<Scanner>) => {
     setScanners(prev => prev.map(s => {
       if (s.id !== id) return s;
+      // If scanner is locked, only allow unlocking (updates with isLocked defined)
+      if (s.isLocked && updates.isLocked === undefined) return s;
       return {
         ...s,
         ...updates,
@@ -309,8 +313,38 @@ export const SimulatorProvider: React.FC<{ children: ReactNode }> = ({ children 
   }, []);
 
   const removeScanner = useCallback((id: string) => {
-    setScanners(prev => prev.filter(s => s.id !== id));
+    setScanners(prev => {
+      const target = prev.find(s => s.id === id);
+      if (target?.isLocked) {
+        alert('This scanner is locked against accidental deletion. Please unlock it first.');
+        return prev;
+      }
+      return prev.filter(s => s.id !== id);
+    });
     setSelectedScannerId(prev => (prev === id ? null : prev));
+  }, []);
+
+  const moveScanner = useCallback((id: string, direction: 'up' | 'down') => {
+    setScanners(prev => {
+      const idx = prev.findIndex(s => s.id === id);
+      if (idx === -1) return prev;
+      const targetIdx = direction === 'up' ? idx - 1 : idx + 1;
+      if (targetIdx < 0 || targetIdx >= prev.length) return prev;
+      const copy = [...prev];
+      const [item] = copy.splice(idx, 1);
+      copy.splice(targetIdx, 0, item);
+      return copy;
+    });
+  }, []);
+
+  const reorderScanners = useCallback((fromIndex: number, toIndex: number) => {
+    setScanners(prev => {
+      if (fromIndex < 0 || fromIndex >= prev.length || toIndex < 0 || toIndex >= prev.length) return prev;
+      const copy = [...prev];
+      const [moved] = copy.splice(fromIndex, 1);
+      copy.splice(toIndex, 0, moved);
+      return copy;
+    });
   }, []);
 
   const duplicateScanner = useCallback((id: string) => {
@@ -750,6 +784,8 @@ export const SimulatorProvider: React.FC<{ children: ReactNode }> = ({ children 
         updateScanner,
         removeScanner,
         duplicateScanner,
+        moveScanner,
+        reorderScanners,
         loadPreset,
         motion,
         setMotionPlaying,
