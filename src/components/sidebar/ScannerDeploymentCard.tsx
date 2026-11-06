@@ -73,14 +73,9 @@ export const ScannerDeploymentCard: React.FC = () => {
           <div className="p-1.5 rounded-md bg-cyan-500/15 text-cyan-400 border border-cyan-500/30 shadow-sm shadow-cyan-900/40">
             <Crosshair className="w-4 h-4" />
           </div>
-          <div className="flex items-center gap-1.5">
-            <h3 className="text-xs font-bold text-cyan-200 tracking-wide font-mono uppercase">
-              Scanner Settings
-            </h3>
-            <span className="text-[9px] px-1.5 py-0.5 rounded bg-cyan-500/20 text-cyan-300 font-mono font-semibold border border-cyan-500/30 uppercase">
-              OPTICS
-            </span>
-          </div>
+          <h3 className="text-xs font-bold text-cyan-200 tracking-wide font-mono uppercase truncate">
+            Scanner Settings
+          </h3>
         </button>
 
         <div className="flex items-center gap-1.5">

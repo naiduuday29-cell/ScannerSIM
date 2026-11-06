@@ -45,14 +45,9 @@ export const ConveyorSettingsCard: React.FC = () => {
           <div className="p-1.5 rounded-md bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 shadow-sm shadow-emerald-900/40">
             <Gauge className="w-4 h-4" />
           </div>
-          <div className="flex items-center gap-1.5">
-            <h3 className="text-xs font-bold text-emerald-200 tracking-wide font-mono uppercase">
-              Conveyor Settings
-            </h3>
-            <span className="text-[9px] px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-300 font-mono font-semibold border border-emerald-500/30">
-              BELT
-            </span>
-          </div>
+          <h3 className="text-xs font-bold text-emerald-200 tracking-wide font-mono uppercase">
+            Conveyor Settings
+          </h3>
         </div>
         <div className="text-emerald-400/80">
           {isOpen ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
