@@ -99,9 +99,6 @@ export const CadReportModal: React.FC<CadReportModalProps> = ({
                   INTEGRATOR BLUEPRINT
                 </span>
               </div>
-              <p className="text-[11px] text-slate-400">
-                Orthographic dimensional drawings of each scanner mounting setup with respect to conveyor datum
-              </p>
             </div>
           </div>
 
@@ -186,9 +183,6 @@ export const CadReportModal: React.FC<CadReportModalProps> = ({
                   {locType}
                 </span>
               </div>
-              <p className="text-[11px] text-slate-400 font-mono mt-0.5">
-                Model: {currentScanner.optical.scannerModel} ({currentScanner.optical.focalLengthMm}mm lens · {currentScanner.optical.resolution})
-              </p>
             </div>
 
             <div className="flex items-center gap-4 text-xs font-mono">

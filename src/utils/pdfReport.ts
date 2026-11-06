@@ -231,7 +231,13 @@ export class PdfDocument {
     const safeText = text
       .replace(/\\/g, '\\\\')
       .replace(/\(/g, '\\(')
-      .replace(/\)/g, '\\)');
+      .replace(/\)/g, '\\)')
+      .replace(/Δ/g, 'd')
+      .replace(/±/g, '\\261')
+      .replace(/°/g, '\\260')
+      .replace(/·/g, '\\267')
+      .replace(/—/g, ' - ')
+      .replace(/–/g, ' - ');
 
     let cmd = 'BT\n';
     cmd += `/${font} ${size.toFixed(2)} Tf\n`;
@@ -275,11 +281,11 @@ export class PdfDocument {
       });
     }
 
-    // Type 1 Standard Core Fonts (Supported natively by all PDF Viewers)
-    bodyParts.push({ id: font1Id, data: `<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>` });
-    bodyParts.push({ id: font2Id, data: `<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold >>` });
-    bodyParts.push({ id: font3Id, data: `<< /Type /Font /Subtype /Type1 /BaseFont /Courier >>` });
-    bodyParts.push({ id: font4Id, data: `<< /Type /Font /Subtype /Type1 /BaseFont /Courier-Bold >>` });
+    // Type 1 Standard Core Fonts (Supported natively by all PDF Viewers with WinAnsiEncoding)
+    bodyParts.push({ id: font1Id, data: `<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>` });
+    bodyParts.push({ id: font2Id, data: `<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold /Encoding /WinAnsiEncoding >>` });
+    bodyParts.push({ id: font3Id, data: `<< /Type /Font /Subtype /Type1 /BaseFont /Courier /Encoding /WinAnsiEncoding >>` });
+    bodyParts.push({ id: font4Id, data: `<< /Type /Font /Subtype /Type1 /BaseFont /Courier-Bold /Encoding /WinAnsiEncoding >>` });
 
     // Page content streams
     for (let i = 0; i < numPages; i++) {
@@ -399,32 +405,87 @@ function drawCadTitleBlock(
   y: number,
   w: number,
   h: number,
-  title: string,
+  scannerName: string,
   dwgNo: string,
   dateStr: string,
   unitStr: string
 ) {
-  pdf.drawRect(x, y, w, h, [0.98, 0.99, 1.0], [0.15, 0.25, 0.40], 1.0);
-  pdf.drawLine(x, y + h - 18, x + w, y + h - 18, [0.2, 0.3, 0.45], 0.6);
-  pdf.drawLine(x, y + 16, x + w, y + 16, [0.2, 0.3, 0.45], 0.6);
+  // Main title block outer container
+  pdf.drawRect(x, y, w, h, [0.985, 0.99, 1.0], [0.15, 0.25, 0.40], 1.0);
 
-  // Subdivisions
-  pdf.drawLine(x + w * 0.6, y, x + w * 0.6, y + h - 18, [0.2, 0.3, 0.45], 0.6);
+  // Row 1: Header (Dark Blue Bar)
+  const headerH = 20;
+  const headerY = y + h - headerH;
+  pdf.drawRect(x, headerY, w, headerH, [0.08, 0.18, 0.32], undefined);
+  pdf.drawText('PROJECT: SCANNER 3D SIM', x + 6, headerY + 6, {
+    font: 'F2',
+    size: 6.5,
+    color: [1, 1, 1]
+  });
+  pdf.drawText(`DWG: ${dwgNo}`, x + w - 6, headerY + 6, {
+    font: 'F4',
+    size: 7,
+    color: [0.35, 0.85, 1.0],
+    align: 'right'
+  });
 
-  // Header Title
-  pdf.drawText('PROJECT: INDUSTRIAL SCANNER MOUNTING SETUP', x + 6, y + h - 13, { font: 'F2', size: 7, color: [0.1, 0.2, 0.35] });
-  pdf.drawText(`DWG NO: ${dwgNo}`, x + w - 6, y + h - 13, { font: 'F4', size: 7.5, color: [0.05, 0.35, 0.7], align: 'right' });
+  // Row 2: Scanner Sheet Title (Full Width Section, Height 36 pt)
+  const titleBoxY = headerY - 36;
+  pdf.drawLine(x, titleBoxY, x + w, titleBoxY, [0.75, 0.82, 0.90], 0.6);
+  pdf.drawText('DRAWING SHEET TITLE:', x + 6, titleBoxY + 26, {
+    font: 'F1',
+    size: 5.5,
+    color: [0.45, 0.50, 0.55]
+  });
+  // Truncate scanner name cleanly if very long
+  const displayScannerName = scannerName.length > 28 ? scannerName.slice(0, 26) + '...' : scannerName;
+  pdf.drawText(displayScannerName.toUpperCase(), x + 6, titleBoxY + 15, {
+    font: 'F2',
+    size: 7.5,
+    color: [0.05, 0.15, 0.35]
+  });
+  pdf.drawText('MECHANICAL MOUNTING & AIMING DETAIL', x + 6, titleBoxY + 5, {
+    font: 'F4',
+    size: 6,
+    color: [0.05, 0.45, 0.70]
+  });
 
-  // Main Drawing Name
-  pdf.drawText(title, x + 6, y + 22, { font: 'F2', size: 8.5, color: [0.05, 0.15, 0.3] });
+  // Row 3: Engineering Metadata (Height 68 pt)
+  const metaY = y + 18;
+  pdf.drawLine(x, metaY, x + w, metaY, [0.75, 0.82, 0.90], 0.6);
+  // Vertical divider between Col A (55% width) and Col B (45% width)
+  const splitX = x + w * 0.55;
+  pdf.drawLine(splitX, metaY, splitX, titleBoxY, [0.75, 0.82, 0.90], 0.6);
 
-  // Right column: Date, Scale, Tolerances
-  pdf.drawText(`DATE: ${dateStr}`, x + w * 0.6 + 6, y + 36, { font: 'F3', size: 6.5, color: [0.2, 0.25, 0.3] });
-  pdf.drawText(`UNITS: ${unitStr.toUpperCase()}`, x + w * 0.6 + 6, y + 26, { font: 'F4', size: 6.5, color: [0.05, 0.45, 0.2] });
-  pdf.drawText(`TOLERANCE: ±2mm / ±0.5°`, x + w * 0.6 + 6, y + 18, { font: 'F3', size: 6, color: [0.3, 0.35, 0.4] });
+  // Left Column Metadata
+  pdf.drawText('DATE:', x + 6, metaY + 52, { font: 'F1', size: 5.5, color: [0.4, 0.45, 0.5] });
+  pdf.drawText(dateStr, x + 6, metaY + 43, { font: 'F3', size: 6, color: [0.15, 0.20, 0.25] });
 
-  // Bottom row: Standard CAD disclaimer
-  pdf.drawText('THIRD ANGLE PROJECTION · WCS CONVEYOR BELT CENTERLINE DATUM [0,0,0]', x + 6, y + 5, { font: 'F1', size: 5.5, color: [0.4, 0.45, 0.5] });
+  pdf.drawText('DISCIPLINE:', x + 6, metaY + 28, { font: 'F1', size: 5.5, color: [0.4, 0.45, 0.5] });
+  pdf.drawText('MECHANICAL / OPTICAL', x + 6, metaY + 19, { font: 'F2', size: 6, color: [0.15, 0.20, 0.25] });
+
+  pdf.drawText('STATUS: RELEASED', x + 6, metaY + 6, {
+    font: 'F4',
+    size: 5.5,
+    color: [0.05, 0.50, 0.25]
+  });
+
+  // Right Column Metadata
+  pdf.drawText('UNITS:', splitX + 6, metaY + 52, { font: 'F1', size: 5.5, color: [0.4, 0.45, 0.5] });
+  pdf.drawText(unitStr.toUpperCase(), splitX + 6, metaY + 43, { font: 'F4', size: 6.5, color: [0.05, 0.50, 0.25] });
+
+  pdf.drawText('TOLERANCE:', splitX + 6, metaY + 28, { font: 'F1', size: 5.5, color: [0.4, 0.45, 0.5] });
+  pdf.drawText('±2mm / ±0.5°', splitX + 6, metaY + 19, { font: 'F3', size: 6, color: [0.2, 0.25, 0.3] });
+
+  pdf.drawText('SCALE: NTS', splitX + 6, metaY + 6, { font: 'F3', size: 5.5, color: [0.35, 0.40, 0.45] });
+
+  // Row 4: Bottom Disclaimer (Height 18 pt)
+  pdf.drawText('THIRD ANGLE PROJECTION · WCS CONVEYOR DATUM [0,0,0]', x + w / 2, y + 6, {
+    font: 'F1',
+    size: 5,
+    color: [0.45, 0.5, 0.55],
+    align: 'center'
+  });
 }
 
 /**
@@ -533,48 +594,51 @@ export function generateMountingReportPdf(options: {
   pdf.drawLine(pdf.margin, curY, pdf.margin + contentW, curY, [0.05, 0.35, 0.70], 1.2);
 
   // Master CAD Drawing Frame
-  const masterCadH = 240;
+  const masterCadH = 220;
   curY -= masterCadH;
   const cadX = pdf.margin;
   const cadY = curY;
   pdf.drawRect(cadX, cadY, contentW, masterCadH, [0.985, 0.99, 1.0], [0.75, 0.82, 0.90], 0.8);
 
-  // Blueprint background gridlines (subtle 20pt grid)
-  for (let gx = cadX + 20; gx < cadX + contentW; gx += 25) {
+  // Blueprint background gridlines (subtle 25pt grid)
+  for (let gx = cadX + 25; gx < cadX + contentW; gx += 25) {
     pdf.drawLine(gx, cadY, gx, cadY + masterCadH, [0.93, 0.95, 0.98], 0.4);
   }
-  for (let gy = cadY + 20; gy < cadY + masterCadH; gy += 25) {
+  for (let gy = cadY + 25; gy < cadY + masterCadH; gy += 25) {
     pdf.drawLine(cadX, gy, cadX + contentW, gy, [0.93, 0.95, 0.98], 0.4);
   }
 
-  // CAD Drawing View Label
-  pdf.drawText('FRONT ELEVATION VIEW — LOOKING DOWNSTREAM ALONG CONVEYOR FLOW (+X)', cadX + 10, cadY + masterCadH - 14, {
+  // CAD Drawing View Label & Centerline Indicator
+  pdf.drawText('FRONT ELEVATION VIEW - LOOKING DOWNSTREAM ALONG CONVEYOR (+X)', cadX + 10, cadY + masterCadH - 14, {
     font: 'F2',
-    size: 7.5,
+    size: 7,
     color: [0.2, 0.3, 0.45]
   });
+  pdf.drawText('CL: CONVEYOR CENTERLINE', cadX + contentW - 10, cadY + masterCadH - 14, {
+    font: 'F2',
+    size: 6.5,
+    color: [0.75, 0.25, 0.2],
+    align: 'right'
+  });
 
-  // Calculate master CAD scale
+  // Calculate master CAD scale & positioning to guarantee everything is inside the CAD frame
   const masterOriginX = cadX + contentW / 2;
-  const masterOriginY = cadY + 80; // Conveyor Belt surface (Y=0)
-  const masterScale = 110; // 1 meter = 110 pt
+  const maxScannerY = Math.max(...scanners.map((s) => s.position.y), 0.8);
+  const totalModelH = conveyor.height + maxScannerY + 0.35;
+  const masterAvailH = masterCadH - 55;
+  const masterScale = Math.min(95, Math.max(50, masterAvailH / totalModelH));
 
-  // Floor Datum Line
-  const floorY = masterOriginY - conveyor.height * masterScale;
-  pdf.drawGroundHatch(cadX + 15, cadX + contentW - 15, floorY, 6);
-  pdf.drawText(`FINISHED FLOOR DATUM (Y = -${fmtLen(conveyor.height)})`, cadX + 20, floorY + 4, {
+  // Anchor Floor Datum safely 22pt above the bottom of the CAD frame (100% inside CAD box)
+  const floorY = cadY + 22;
+  pdf.drawGroundHatch(cadX + 15, cadX + contentW - 15, floorY, 5);
+  pdf.drawText(`FINISHED FLOOR DATUM (Y = -${fmtLen(conveyor.height)})`, cadX + 20, floorY + 3, {
     font: 'F2',
     size: 6.5,
     color: [0.3, 0.35, 0.4]
   });
 
-  // Centerline (CL)
-  pdf.drawCenterline(masterOriginX, floorY - 6, masterOriginX, cadY + masterCadH - 20);
-  pdf.drawText('CL (CONVEYOR CENTERLINE)', masterOriginX + 3, cadY + masterCadH - 25, {
-    font: 'F2',
-    size: 6,
-    color: [0.75, 0.25, 0.2]
-  });
+  // Conveyor Belt surface (Y=0) is computed UPWARD from floorY
+  const masterOriginY = floorY + conveyor.height * masterScale;
 
   // Conveyor Bed Cross-Section
   const halfBW = (conveyor.width / 2) * masterScale;
@@ -593,9 +657,11 @@ export function generateMountingReportPdf(options: {
 
   // Gantry Portal Frame
   const portalHalfW = halfBW + 0.35 * masterScale;
-  const maxScannerY = Math.max(...scanners.map((s) => s.position.y), 1.0);
-  const beamHeight = (maxScannerY + 0.18) * masterScale;
+  const beamHeight = (maxScannerY + 0.16) * masterScale;
   const beamY = masterOriginY + beamHeight;
+
+  // Centerline (CL)
+  pdf.drawCenterline(masterOriginX, floorY - 3, masterOriginX, beamY + 16);
 
   // Gantry Posts
   pdf.drawRect(masterOriginX - portalHalfW - 5, floorY, 10, beamY - floorY, [0.4, 0.45, 0.5], [0.25, 0.3, 0.35], 0.8);
@@ -649,7 +715,7 @@ export function generateMountingReportPdf(options: {
   );
 
   // Section 3: Summary Table
-  curY -= 16;
+  curY = cadY - 18;
   pdf.drawText('3. SCANNER ARRAY INSTALLATION SUMMARY TABLE', pdf.margin, curY, {
     font: 'F2',
     size: 9.5,
@@ -767,22 +833,32 @@ export function generateMountingReportPdf(options: {
     // Split drawing area into two large CAD panels:
     // PANEL 1: FRONT ELEVATION VIEW (Z-Y Cross Section)
     // PANEL 2: SIDE ELEVATION VIEW (X-Y Flow Section)
-    const viewTopY = pdf.height - pdf.margin - 50;
-    const panelH = 340;
-    const panelW = (contentW - 14) / 2; // ~254 pt each
-    const panel1X = pdf.margin + 5;
-    const panel2X = panel1X + panelW + 4;
-    const panelY = viewTopY - panelH;
+    const viewTopY = pdf.height - pdf.margin - 48;
+    const lowerY = pdf.margin + 6;
+    const lowerH = 142;
+    const panelY = lowerY + lowerH + 8;
+    const panelH = viewTopY - panelY; // ~556 pt
+
+    const totalInnerW = contentW - 12; // 511.28 pt
+    const panelW = (totalInnerW - 6) / 2; // 252.64 pt each
+    const panel1X = pdf.margin + 6;
+    const panel2X = panel1X + panelW + 6;
+
+    // Scale calculation: Ensure gantry & dimensions fit comfortably inside panel
+    const maxScannerY = Math.max(scanner.position.y, 0.8);
+    const totalElevH = conveyor.height + maxScannerY + 0.35;
+    const availElevH = panelH - 80;
+    const fScale = Math.min(95, Math.max(50, availElevH / totalElevH));
 
     // -----------------------------------------------------------------------
     // CAD VIEW 1: FRONT ELEVATION (Z-Y CROSS SECTION)
     // -----------------------------------------------------------------------
     pdf.drawRect(panel1X, panelY, panelW, panelH, [0.985, 0.99, 1.0], [0.75, 0.82, 0.90], 0.8);
     // Gridlines
-    for (let gx = panel1X + 20; gx < panel1X + panelW; gx += 20) {
+    for (let gx = panel1X + 25; gx < panel1X + panelW; gx += 25) {
       pdf.drawLine(gx, panelY, gx, panelY + panelH, [0.94, 0.96, 0.98], 0.35);
     }
-    for (let gy = panelY + 20; gy < panelY + panelH; gy += 20) {
+    for (let gy = panelY + 25; gy < panelY + panelH; gy += 25) {
       pdf.drawLine(panel1X, gy, panel1X + panelW, gy, [0.94, 0.96, 0.98], 0.35);
     }
 
@@ -790,13 +866,12 @@ export function generateMountingReportPdf(options: {
     pdf.drawText('LOOKING DOWNSTREAM IN FLOW DIRECTION (+X)', panel1X + 8, panelY + panelH - 24, { font: 'F1', size: 6, color: [0.4, 0.45, 0.55] });
 
     // Front Elevation Geometry
-    const fOriginX = panel1X + panelW / 2;
-    const fOriginY = panelY + 110; // Conveyor Belt surface (Y=0)
-    const fScale = 90; // 1 meter = 90 pt
+    const fOriginX = panel1X + panelW / 2 - 12; // slight shift left to leave room for ΔY & AFF dimension callouts
+    const fFloorY = panelY + 30; // safely inside the panel
+    const fOriginY = fFloorY + conveyor.height * fScale; // Conveyor Belt surface (Y=0)
 
-    const fFloorY = fOriginY - conveyor.height * fScale;
     pdf.drawGroundHatch(panel1X + 10, panel1X + panelW - 10, fFloorY, 5);
-    pdf.drawText('FLOOR DATUM', panel1X + 12, fFloorY + 3, { font: 'F3', size: 5.5, color: [0.35, 0.4, 0.45] });
+    pdf.drawText(`FLOOR DATUM (Y = -${fmtLen(conveyor.height)})`, panel1X + 12, fFloorY + 3, { font: 'F3', size: 5.5, color: [0.35, 0.4, 0.45] });
 
     // Centerline
     pdf.drawCenterline(fOriginX, fFloorY - 4, fOriginX, panelY + panelH - 30);
@@ -816,7 +891,7 @@ export function generateMountingReportPdf(options: {
 
     // Gantry Frame
     const fPortalHW = fHalfBW + 0.35 * fScale;
-    const fBeamY = fOriginY + (Math.max(scanner.position.y, 1.1) + 0.18) * fScale;
+    const fBeamY = fOriginY + (Math.max(scanner.position.y, 1.1) + 0.16) * fScale;
     pdf.drawRect(fOriginX - fPortalHW - 4, fFloorY, 8, fBeamY - fFloorY, [0.45, 0.5, 0.55], [0.3, 0.35, 0.4], 0.7);
     pdf.drawRect(fOriginX + fPortalHW - 4, fFloorY, 8, fBeamY - fFloorY, [0.45, 0.5, 0.55], [0.3, 0.35, 0.4], 0.7);
     pdf.drawRect(fOriginX - fPortalHW - 6, fBeamY, (fPortalHW + 6) * 2, 8, [0.45, 0.5, 0.55], [0.3, 0.35, 0.4], 0.7);
@@ -841,27 +916,27 @@ export function generateMountingReportPdf(options: {
     pdf.drawDashedLine(fScX, fScY - 6, fOriginX, fOriginY, [0.0, 0.65, 0.8], 0.8);
 
     // Front Elevation DIMENSIONS:
-    // 1. Height Above Belt (ΔY)
-    const dimYOffset = panel1X + panelW - 35;
-    pdf.drawDimension(dimYOffset, fOriginY, dimYOffset, fScY, `ΔY = ${fmtLen(scanner.position.y)}`, {
+    // 1. Height Above Belt (dY) - cleanly spaced from right border
+    const dimYOffset = panel1X + panelW - 55;
+    pdf.drawDimension(dimYOffset, fOriginY, dimYOffset, fScY, `dY = ${fmtLen(scanner.position.y)}`, {
       color: [0.05, 0.5, 0.25],
       extLine1: { fromX: fOriginX + fHalfBW + 3, fromY: fOriginY },
       extLine2: { fromX: fScX + 8, fromY: fScY },
       fontSize: 6.5
     });
 
-    // 2. Height Above Finished Floor (AFF)
-    const dimAffOffset = panel1X + panelW - 14;
+    // 2. Height Above Finished Floor (AFF) - guaranteed inside panel boundary
+    const dimAffOffset = panel1X + panelW - 25;
     pdf.drawDimension(dimAffOffset, fFloorY, dimAffOffset, fScY, `AFF = ${fmtLen(aff)}`, {
       color: [0.1, 0.25, 0.55],
-      extLine1: { fromX: panel1X + panelW - 25, fromY: fFloorY },
+      extLine1: { fromX: panel1X + panelW - 35, fromY: fFloorY },
       extLine2: { fromX: dimYOffset + 4, fromY: fScY },
       fontSize: 6.5
     });
 
-    // 3. Centerline Offset (ΔZ)
+    // 3. Centerline Offset (dZ)
     if (Math.abs(scanner.position.z) > 0.02) {
-      pdf.drawDimension(fOriginX, fScY + 14, fScX, fScY + 14, `ΔZ = ${fmtLen(Math.abs(scanner.position.z))}`, {
+      pdf.drawDimension(fOriginX, fScY + 14, fScX, fScY + 14, `dZ = ${fmtLen(Math.abs(scanner.position.z))}`, {
         color: [0.75, 0.25, 0.2],
         extLine1: { fromX: fOriginX, fromY: fScY + 3 },
         extLine2: { fromX: fScX, fromY: fScY + 6 },
@@ -870,7 +945,7 @@ export function generateMountingReportPdf(options: {
     }
 
     // 4. Belt Width
-    pdf.drawDimension(fOriginX - fHalfBW, fOriginY - 24, fOriginX + fHalfBW, fOriginY - 24, `W = ${fmtLen(conveyor.width)}`, {
+    pdf.drawDimension(fOriginX - fHalfBW, fOriginY - 22, fOriginX + fHalfBW, fOriginY - 22, `W = ${fmtLen(conveyor.width)}`, {
       color: [0.2, 0.3, 0.4],
       extLine1: { fromX: fOriginX - fHalfBW, fromY: fOriginY - 4 },
       extLine2: { fromX: fOriginX + fHalfBW, fromY: fOriginY - 4 },
@@ -884,10 +959,10 @@ export function generateMountingReportPdf(options: {
     // CAD VIEW 2: SIDE ELEVATION (X-Y FLOW SECTION)
     // -----------------------------------------------------------------------
     pdf.drawRect(panel2X, panelY, panelW, panelH, [0.985, 0.99, 1.0], [0.75, 0.82, 0.90], 0.8);
-    for (let gx = panel2X + 20; gx < panel2X + panelW; gx += 20) {
+    for (let gx = panel2X + 25; gx < panel2X + panelW; gx += 25) {
       pdf.drawLine(gx, panelY, gx, panelY + panelH, [0.94, 0.96, 0.98], 0.35);
     }
-    for (let gy = panelY + 20; gy < panelY + panelH; gy += 20) {
+    for (let gy = panelY + 25; gy < panelY + panelH; gy += 25) {
       pdf.drawLine(panel2X, gy, panel2X + panelW, gy, [0.94, 0.96, 0.98], 0.35);
     }
 
@@ -895,12 +970,12 @@ export function generateMountingReportPdf(options: {
     pdf.drawText('LOOKING FROM SIDE ACROSS CONVEYOR BELT', panel2X + 8, panelY + panelH - 24, { font: 'F1', size: 6, color: [0.4, 0.45, 0.55] });
 
     const sOriginX = panel2X + panelW / 2;
-    const sOriginY = panelY + 110;
-    const sScale = 90;
+    const sScale = fScale;
+    const sFloorY = fFloorY;
+    const sOriginY = fOriginY;
 
-    const sFloorY = sOriginY - conveyor.height * sScale;
     pdf.drawGroundHatch(panel2X + 10, panel2X + panelW - 10, sFloorY, 5);
-    pdf.drawText('FLOOR DATUM', panel2X + 12, sFloorY + 3, { font: 'F3', size: 5.5, color: [0.35, 0.4, 0.45] });
+    pdf.drawText(`FLOOR DATUM (Y = -${fmtLen(conveyor.height)})`, panel2X + 12, sFloorY + 3, { font: 'F3', size: 5.5, color: [0.35, 0.4, 0.45] });
 
     // Gantry Centerline (X=0)
     pdf.drawCenterline(sOriginX, sFloorY - 4, sOriginX, panelY + panelH - 30);
@@ -915,7 +990,7 @@ export function generateMountingReportPdf(options: {
     pdf.drawText('---> CONVEYOR FLOW (+X) --->', sOriginX - 45, sOriginY - 9, { font: 'F2', size: 5.5, color: [0.15, 0.35, 0.2] });
 
     // Gantry Upright at X=0
-    const sBeamY = sOriginY + (Math.max(scanner.position.y, 1.1) + 0.18) * sScale;
+    const sBeamY = sOriginY + (Math.max(scanner.position.y, 1.1) + 0.16) * sScale;
     pdf.drawRect(sOriginX - 4, sFloorY, 8, sBeamY - sFloorY, [0.45, 0.5, 0.55], [0.3, 0.35, 0.4], 0.7);
 
     // Scanner along X
@@ -934,9 +1009,9 @@ export function generateMountingReportPdf(options: {
     pdf.drawRect(sAimX - 3, sOriginY - 1, 6, 2, [0.8, 0.1, 0.1], undefined);
 
     // Side Elevation DIMENSIONS:
-    // 1. Longitudinal Offset (ΔX)
+    // 1. Longitudinal Offset (dX)
     if (Math.abs(scanner.position.x) > 0.01) {
-      pdf.drawDimension(sOriginX, sScY + 16, sScX, sScY + 16, `ΔX = ${fmtLen(scanner.position.x)}`, {
+      pdf.drawDimension(sOriginX, sScY + 16, sScX, sScY + 16, `dX = ${fmtLen(scanner.position.x)}`, {
         color: [0.05, 0.35, 0.7],
         extLine1: { fromX: sOriginX, fromY: sScY + 3 },
         extLine2: { fromX: sScX, fromY: sScY + 5 },
@@ -950,58 +1025,74 @@ export function generateMountingReportPdf(options: {
       fontSize: 6
     });
 
-    // Pitch Angle Callout
-    pdf.drawText(`PITCH: ${scanner.rotation.pitch}°`, sScX + 9, sScY - 2, { font: 'F4', size: 6.5, color: [0.7, 0.3, 0.05] });
+    // Pitch Angle Callout (bounded safely inside panel)
+    const pitchX = sScX + 9 + 48 > panel2X + panelW - 10 ? sScX - 52 : sScX + 9;
+    pdf.drawText(`PITCH: ${scanner.rotation.pitch}°`, pitchX, sScY - 2, { font: 'F4', size: 6.5, color: [0.7, 0.3, 0.05] });
 
-    // Aim point callout
-    pdf.drawText(`AIM: X=${fmtLen(aimInfo.aimX)}`, sAimX - 15, sOriginY + 8, { font: 'F3', size: 5.5, color: [0.8, 0.1, 0.1] });
+    // Aim point callout (bounded safely inside panel)
+    const aimLabelX = Math.max(panel2X + 12, Math.min(panel2X + panelW - 65, sAimX - 25));
+    pdf.drawText(`AIM: X=${fmtLen(aimInfo.aimX)}`, aimLabelX, sOriginY + 8, { font: 'F3', size: 5.5, color: [0.8, 0.1, 0.1] });
 
     // -----------------------------------------------------------------------
     // LOWER SECTION: MECHANICAL SPECS TABLE & CAD TITLE BLOCK
     // -----------------------------------------------------------------------
-    const lowerY = panelY - 150;
-    const lowerH = 142;
+    const titleBlockW = 195;
+    const specsW = totalInnerW - titleBlockW - 6; // ~310 pt
+    const specsX = panel1X;
+    const titleBlockX = specsX + specsW + 6;
 
     // Left Panel: Mechanical Installation Dimensional Checklist Table
-    const specsW = contentW - 190;
-    pdf.drawRect(panel1X, lowerY, specsW, lowerH, [0.97, 0.985, 0.99], [0.78, 0.84, 0.90], 0.8);
+    pdf.drawRect(specsX, lowerY, specsW, lowerH, [0.985, 0.99, 1.0], [0.75, 0.82, 0.90], 0.8);
 
-    pdf.drawRect(panel1X, lowerY + lowerH - 16, specsW, 16, [0.1, 0.2, 0.35], undefined);
-    pdf.drawText(`MECHANICAL INSTALLATION SPECIFICATIONS & MOUNTING CHECKLIST`, panel1X + 8, lowerY + lowerH - 11, {
+    const sHeaderH = 18;
+    pdf.drawRect(specsX, lowerY + lowerH - sHeaderH, specsW, sHeaderH, [0.08, 0.18, 0.32], undefined);
+    pdf.drawText(`MECHANICAL INSTALLATION SPECIFICATIONS & CHECKLIST`, specsX + 8, lowerY + lowerH - 12.5, {
       font: 'F2',
-      size: 7.5,
+      size: 7,
       color: [1, 1, 1]
     });
 
     const mRows = [
-      { param: '1. Vertical Elevation Above Belt (Y Datum)', val: fmtLen(scanner.position.y), note: 'Belt surface reference datum (Y = 0.00)' },
-      { param: '2. Total Finished Floor Height (AFF)', val: fmtLen(aff), note: 'From finished warehouse concrete floor' },
-      { param: '3. Lateral Offset from Centerline (Z)', val: `${fmtLen(scanner.position.z)} (${scanner.position.z > 0 ? 'Left +Z' : scanner.position.z < 0 ? 'Right -Z' : 'Center'})`, note: 'Measured from conveyor belt centerline' },
-      { param: '4. Clear Standoff to Belt Edge', val: railClearance > 0 ? `+${fmtLen(railClearance)} (outside rail)` : `${fmtLen(Math.abs(railClearance))} (overhang inside)`, note: `Conveyor half-width = ±${fmtLen(halfBeltW)}` },
-      { param: '5. Longitudinal Flow Position (X)', val: `${fmtLen(scanner.position.x)} (${scanner.position.x >= 0 ? 'Downstream' : 'Upstream'})`, note: 'Offset from gantry portal center plane' },
-      { param: '6. Mounting Orientation Angles', val: `Pitch: ${scanner.rotation.pitch}° | Roll: ${scanner.rotation.roll}° | Yaw: ${scanner.rotation.yaw}°`, note: 'Torque bracket bolts to 25 Nm' },
-      { param: '7. Optical Boresight Aim on Belt', val: `X = ${fmtLen(aimInfo.aimX)}, Z = ${fmtLen(aimInfo.aimZ)}`, note: `Target Working Distance = ${fmtLen(aimInfo.workingDist)}` },
-      { param: '8. Depth of Field (Focus Window)', val: `${fmtLen(scanner.optical.dofNear)} to ${fmtLen(scanner.optical.dofFar)} (ΔDOF: ${fmtLen(scanner.optical.dofFar - scanner.optical.dofNear)})`, note: `Lens: ${scanner.optical.focalLengthMm}mm (${scanner.optical.resolution})` }
+      { param: '1. Vertical Elevation (dY)', val: fmtLen(scanner.position.y), note: 'Belt datum (Y=0)' },
+      { param: '2. Total Floor Height (AFF)', val: fmtLen(aff), note: 'Concrete floor datum' },
+      { param: '3. Centerline Offset (dZ)', val: `${fmtLen(scanner.position.z)} (${scanner.position.z > 0 ? '+Z Left' : scanner.position.z < 0 ? '-Z Right' : 'Center'})`, note: 'Measured from belt CL' },
+      { param: '4. Clear Standoff to Rail', val: railClearance > 0 ? `+${fmtLen(railClearance)} (outside)` : `${fmtLen(Math.abs(railClearance))} (overhang)`, note: `Half-width: ±${fmtLen(halfBeltW)}` },
+      { param: '5. Flow Position (dX)', val: `${fmtLen(scanner.position.x)} (${scanner.position.x >= 0 ? 'Downstream' : 'Upstream'})`, note: 'Gantry center plane' },
+      { param: '6. Mounting Angles', val: `P:${scanner.rotation.pitch}° R:${scanner.rotation.roll}° Y:${scanner.rotation.yaw}°`, note: 'Torque bolts: 25 Nm' },
+      { param: '7. Optical Aim Point', val: `X:${fmtLen(aimInfo.aimX)}, Z:${fmtLen(aimInfo.aimZ)}`, note: `Target WD: ${fmtLen(aimInfo.workingDist)}` },
+      { param: '8. Focus Window (DOF)', val: `${fmtLen(scanner.optical.dofNear)} to ${fmtLen(scanner.optical.dofFar)}`, note: `Span: ${fmtLen(scanner.optical.dofFar - scanner.optical.dofNear)}` }
     ];
 
-    let rowCurY = lowerY + lowerH - 28;
-    for (const r of mRows) {
-      pdf.drawText(r.param, panel1X + 8, rowCurY, { font: 'F2', size: 6.5, color: [0.15, 0.2, 0.3] });
-      pdf.drawText(r.val, panel1X + 160, rowCurY, { font: 'F4', size: 6.5, color: [0.05, 0.40, 0.70] });
-      pdf.drawText(r.note, panel1X + 250, rowCurY, { font: 'F1', size: 6, color: [0.45, 0.5, 0.55] });
-      rowCurY -= 14;
-    }
+    const rowH = (lowerH - sHeaderH) / mRows.length; // ~15.5 pt
+    const col1W = 118;
+    const col2W = 98;
+
+    // Vertical column dividing lines
+    pdf.drawLine(specsX + col1W, lowerY, specsX + col1W, lowerY + lowerH - sHeaderH, [0.85, 0.88, 0.92], 0.4);
+    pdf.drawLine(specsX + col1W + col2W, lowerY, specsX + col1W + col2W, lowerY + lowerH - sHeaderH, [0.85, 0.88, 0.92], 0.4);
+
+    let rowCurY = lowerY + lowerH - sHeaderH - rowH;
+    mRows.forEach((r, rIdx) => {
+      const isEven = rIdx % 2 === 0;
+      if (isEven) {
+        pdf.drawRect(specsX, rowCurY, specsW, rowH, [0.95, 0.97, 0.99], undefined);
+      }
+      pdf.drawLine(specsX, rowCurY, specsX + specsW, rowCurY, [0.88, 0.91, 0.94], 0.4);
+
+      pdf.drawText(r.param, specsX + 6, rowCurY + 4.5, { font: 'F2', size: 6.5, color: [0.15, 0.20, 0.30] });
+      pdf.drawText(r.val, specsX + col1W + 6, rowCurY + 4.5, { font: 'F4', size: 6.5, color: [0.05, 0.40, 0.70] });
+      pdf.drawText(r.note, specsX + col1W + col2W + 6, rowCurY + 4.5, { font: 'F1', size: 6, color: [0.45, 0.50, 0.55] });
+      rowCurY -= rowH;
+    });
 
     // Right Panel: Official CAD Engineering Title Block
-    const titleBlockX = panel1X + specsW + 4;
-    const titleBlockW = contentW - specsW - 14;
     drawCadTitleBlock(
       pdf,
       titleBlockX,
       lowerY,
       titleBlockW,
       lowerH,
-      `${scanner.name.toUpperCase()}\nMOUNTING CAD DETAIL`,
+      scanner.name,
       sheetNo,
       dateStr,
       dim
