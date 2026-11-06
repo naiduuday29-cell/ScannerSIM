@@ -9,8 +9,7 @@ import {
   EyeOff,
   Crosshair,
   Calculator,
-  ArrowUp,
-  ArrowDown,
+  GripVertical,
   Lock,
   Unlock
 } from 'lucide-react';
@@ -29,7 +28,7 @@ export const ScannerDeploymentCard: React.FC = () => {
     updateScanner,
     removeScanner,
     duplicateScanner,
-    moveScanner
+    reorderScanners
   } = useSimulator();
 
   // Collapsed at opening as requested
@@ -37,6 +36,9 @@ export const ScannerDeploymentCard: React.FC = () => {
   const [expandedScannerId, setExpandedScannerId] = useState<string | null>(
     scanners[0]?.id || null
   );
+  // Drag and drop reordering state
+  const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
+  const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
   // Input mode per scanner: 'angles' (default) or 'twopoint' (2-distance capture area)
   const [fovInputMode, setFovInputMode] = useState<Record<string, 'angles' | 'twopoint'>>({});
 
@@ -108,20 +110,74 @@ export const ScannerDeploymentCard: React.FC = () => {
             scanners.map((scanner, index) => {
               const isExpanded = expandedScannerId === scanner.id;
               const isSelected = selectedScannerId === scanner.id;
+              const isDragging = draggedIndex === index;
+              const isDragOver = dragOverIndex === index && draggedIndex !== index;
 
               return (
                 <div
                   key={scanner.id}
+                  draggable
+                  onDragStart={(e) => {
+                    const target = e.target as HTMLElement;
+                    if (
+                      target.tagName === 'INPUT' ||
+                      target.tagName === 'BUTTON' ||
+                      target.closest('button') ||
+                      target.closest('input')
+                    ) {
+                      e.preventDefault();
+                      return;
+                    }
+                    setDraggedIndex(index);
+                    e.dataTransfer.effectAllowed = 'move';
+                    e.dataTransfer.setData('text/plain', String(index));
+                  }}
+                  onDragOver={(e) => {
+                    e.preventDefault();
+                    e.dataTransfer.dropEffect = 'move';
+                    if (dragOverIndex !== index) {
+                      setDragOverIndex(index);
+                    }
+                  }}
+                  onDragLeave={() => {
+                    if (dragOverIndex === index) {
+                      setDragOverIndex(null);
+                    }
+                  }}
+                  onDrop={(e) => {
+                    e.preventDefault();
+                    if (draggedIndex !== null && draggedIndex !== index) {
+                      reorderScanners(draggedIndex, index);
+                    }
+                    setDraggedIndex(null);
+                    setDragOverIndex(null);
+                  }}
+                  onDragEnd={() => {
+                    setDraggedIndex(null);
+                    setDragOverIndex(null);
+                  }}
                   onClick={() => setSelectedScannerId(scanner.id)}
                   className={`rounded-lg border transition-all ${
-                    isSelected
+                    isDragging
+                      ? 'opacity-40 border-dashed border-cyan-400 bg-slate-900/40 scale-[0.98]'
+                      : isDragOver
+                      ? 'ring-2 ring-cyan-400 border-cyan-400 bg-cyan-950/40 scale-[1.01]'
+                      : isSelected
                       ? 'border-cyan-500/60 bg-slate-900/90 shadow-md ring-1 ring-cyan-500/20'
                       : 'border-slate-800 bg-slate-950/60 hover:border-slate-700'
                   }`}
                 >
                   {/* Scanner Item Header Bar */}
                   <div className="px-3 py-2 flex items-center justify-between gap-2">
-                    <div className="flex items-center gap-2 flex-1 min-w-0">
+                    <div className="flex items-center gap-1.5 flex-1 min-w-0">
+                      {/* Drag & Drop Grip Handle */}
+                      <div
+                        className="p-1 text-slate-500 hover:text-cyan-400 cursor-grab active:cursor-grabbing rounded hover:bg-slate-800 transition-colors flex-shrink-0"
+                        title="Drag and drop to reorder scanner in array"
+                      >
+                        <GripVertical className="w-3.5 h-3.5" />
+                      </div>
+
                       {/* Active Toggle */}
                       <button
                         onClick={(e) => {
@@ -138,12 +194,6 @@ export const ScannerDeploymentCard: React.FC = () => {
                         {scanner.isActive ? <Eye className="w-4 h-4" /> : <EyeOff className="w-4 h-4" />}
                       </button>
 
-                      {/* Color Tag */}
-                      <span
-                        className="w-2.5 h-2.5 rounded-full flex-shrink-0"
-                        style={{ backgroundColor: scanner.color }}
-                      />
-
                       {/* Name input */}
                       <input
                         type="text"
@@ -155,45 +205,11 @@ export const ScannerDeploymentCard: React.FC = () => {
                           scanner.isLocked ? 'text-slate-400 cursor-not-allowed' : 'text-slate-200'
                         }`}
                       />
-
-                      {/* Locked badge indicator */}
-                      {scanner.isLocked && (
-                        <span className="text-[9px] font-mono font-bold px-1.5 py-0.2 rounded bg-amber-500/20 text-amber-300 border border-amber-500/40 flex items-center gap-1 flex-shrink-0">
-                          <Lock className="w-2.5 h-2.5" />
-                          LOCKED
-                        </span>
-                      )}
                     </div>
 
-                    {/* Action Icons: Reorder, Lock, Duplicate, Delete, Expand */}
+                    {/* Action Icons: Lock, Duplicate, Delete, Expand */}
                     <div className="flex items-center gap-1">
-                      {/* Reorder: Move Up */}
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          moveScanner(scanner.id, 'up');
-                        }}
-                        disabled={index === 0}
-                        title={index === 0 ? 'First in order' : 'Move scanner up in array'}
-                        className="p-1 text-slate-400 hover:text-cyan-300 disabled:opacity-20 disabled:hover:text-slate-400 rounded hover:bg-slate-800 transition-colors"
-                      >
-                        <ArrowUp className="w-3.5 h-3.5" />
-                      </button>
-
-                      {/* Reorder: Move Down */}
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          moveScanner(scanner.id, 'down');
-                        }}
-                        disabled={index === scanners.length - 1}
-                        title={index === scanners.length - 1 ? 'Last in order' : 'Move scanner down in array'}
-                        className="p-1 text-slate-400 hover:text-cyan-300 disabled:opacity-20 disabled:hover:text-slate-400 rounded hover:bg-slate-800 transition-colors"
-                      >
-                        <ArrowDown className="w-3.5 h-3.5" />
-                      </button>
-
-                      {/* Lock / Unlock Toggle to Prevent Accidental Changes */}
+                      {/* Lock / Unlock Toggle */}
                       <button
                         onClick={(e) => {
                           e.stopPropagation();
@@ -255,22 +271,6 @@ export const ScannerDeploymentCard: React.FC = () => {
                   {/* Expanded Parameter Sliders + Exact Number Inputs */}
                   {isExpanded && (
                     <div className="p-3 pt-2 space-y-3.5 border-t border-slate-800/80 bg-slate-950/40 text-[11px]">
-                      {/* Lock Notification Banner when locked */}
-                      {scanner.isLocked && (
-                        <div className="p-2.5 rounded-lg bg-amber-950/40 border border-amber-500/40 text-amber-200 flex items-center justify-between text-[11px] font-mono shadow-sm">
-                          <div className="flex items-center gap-2">
-                            <Lock className="w-3.5 h-3.5 text-amber-400 flex-shrink-0" />
-                            <span>Settings are <strong>Locked</strong> against accidental edits</span>
-                          </div>
-                          <button
-                            type="button"
-                            onClick={() => updateScanner(scanner.id, { isLocked: false })}
-                            className="px-2 py-0.5 rounded bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 font-bold border border-amber-500/40 transition-colors cursor-pointer text-[10px]"
-                          >
-                            Unlock
-                          </button>
-                        </div>
-                      )}
 
                       {/* POSITION SECTION */}
                       <div className="space-y-2">
