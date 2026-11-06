@@ -100,22 +100,13 @@ export const PartSettingsCard: React.FC = () => {
           <div className="p-1.5 rounded-md bg-amber-500/15 text-amber-400 border border-amber-500/30 shadow-sm shadow-amber-900/40">
             {partType === 'carton' ? <Box className="w-4 h-4" /> : <Disc className="w-4 h-4" />}
           </div>
-          <div>
-            <div className="flex items-center gap-1.5">
-              <h3 className="text-xs font-bold text-amber-200 tracking-wide font-mono uppercase">
-                Part & Code Engine
-              </h3>
-              <span className="text-[9px] px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-300 font-mono font-semibold border border-amber-500/30 uppercase">
-                {partType}
-              </span>
-            </div>
-            <p className="text-[10px] text-amber-400/70 font-mono capitalize">
-              {partType === 'carton' ? (
-                `Carton · ${carton.activeTarget} (${carton.barcodeFaces.length} code faces)`
-              ) : (
-                `Tyre · ${tyre.activeTarget} (${tyre.barcodeLocation})`
-              )}
-            </p>
+          <div className="flex items-center gap-1.5">
+            <h3 className="text-xs font-bold text-amber-200 tracking-wide font-mono uppercase">
+              Part & Code Settings
+            </h3>
+            <span className="text-[9px] px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-300 font-mono font-semibold border border-amber-500/30 uppercase">
+              {partType}
+            </span>
           </div>
         </div>
         <div className="text-amber-400/80">
