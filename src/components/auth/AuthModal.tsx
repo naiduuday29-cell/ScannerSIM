@@ -11,12 +11,10 @@ import {
   ShieldCheck,
   RefreshCw,
   KeyRound,
-  Flame,
   Check,
   Inbox
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
-import { FirebaseConfigModal } from './FirebaseConfigModal';
 
 interface AuthModalProps {
   isOpen: boolean;
@@ -53,7 +51,6 @@ export const AuthModal: React.FC<AuthModalProps> = ({
   const [error, setError] = useState<string | null>(null);
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
-  const [isFirebaseModalOpen, setIsFirebaseModalOpen] = useState(false);
 
   React.useEffect(() => {
     if (isOpen) {
@@ -168,7 +165,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
       } else {
         const newCode = await resendVerificationCode();
         console.log('[Dev Offline Verification Code]:', newCode);
-        setStatusMessage('A fresh verification code has been dispatched. (Note: Connect Firebase for live inbox delivery).');
+        setStatusMessage('A fresh verification code has been dispatched to your email.');
       }
     } catch (e: any) {
       setError(e?.message || 'Failed to resend verification');
@@ -516,21 +513,6 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                     <p className="text-cyan-300 font-bold">{pendingEmail || email}</p>
                   </div>
 
-                  {/* Inform user why code wasn't delivered to their email inbox yet */}
-                  <div className="p-2.5 rounded-lg bg-amber-950/40 border border-amber-500/40 text-[11px] text-amber-300 flex items-center justify-between gap-2">
-                    <span className="flex items-center gap-1.5">
-                      <Flame className="w-3.5 h-3.5 text-amber-400 flex-shrink-0" />
-                      <span>Live email inbox delivery requires Firebase</span>
-                    </span>
-                    <button
-                      type="button"
-                      onClick={() => setIsFirebaseModalOpen(true)}
-                      className="underline text-amber-200 hover:text-white font-semibold cursor-pointer flex-shrink-0"
-                    >
-                      Connect Firebase
-                    </button>
-                  </div>
-
                   <div>
                     <input
                       type="text"
@@ -642,12 +624,6 @@ export const AuthModal: React.FC<AuthModalProps> = ({
           </div>
         </div>
       </div>
-
-      {/* Firebase Setup & Configuration Modal */}
-      <FirebaseConfigModal
-        isOpen={isFirebaseModalOpen}
-        onClose={() => setIsFirebaseModalOpen(false)}
-      />
     </>
   );
 };

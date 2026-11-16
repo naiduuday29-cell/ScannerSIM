@@ -24,22 +24,29 @@ export interface FirebaseConfig {
 
 const STORAGE_CONFIG_KEY = 'scanner_sim_firebase_config_v1';
 
-// Load config from environment variables or localStorage
+// ==============================================================================
+// PERMANENT BUILT-IN FIREBASE CONFIGURATION
+// To connect Firebase permanently for ALL users across any computer, browser,
+// or deployed URL without needing .env variables, paste your web app
+// config values from the Firebase Console (Project Settings -> General -> Your apps) below:
+// ==============================================================================
+export const PERMANENT_FIREBASE_CONFIG: FirebaseConfig = {
+  apiKey: '',
+  authDomain: '',
+  projectId: '',
+  storageBucket: '',
+  messagingSenderId: '',
+  appId: ''
+};
+
+// Load config from permanent config, environment variables, or localStorage
 export const getStoredFirebaseConfig = (): FirebaseConfig | null => {
-  // 1. Check localStorage first (user-configured via UI)
-  try {
-    const saved = localStorage.getItem(STORAGE_CONFIG_KEY);
-    if (saved) {
-      const parsed = JSON.parse(saved);
-      if (parsed?.apiKey && parsed?.projectId) {
-        return parsed;
-      }
-    }
-  } catch (e) {
-    console.warn('Failed to parse Firebase config from localStorage:', e);
+  // 1. Check permanent built-in config first (zero-configuration production deployment)
+  if (PERMANENT_FIREBASE_CONFIG.apiKey && PERMANENT_FIREBASE_CONFIG.projectId) {
+    return PERMANENT_FIREBASE_CONFIG;
   }
 
-  // 2. Fall back to Vite environment variables (VITE_FIREBASE_*)
+  // 2. Check Vite environment variables (VITE_FIREBASE_*)
   const metaEnv = (import.meta as any).env || {};
   const envApiKey = metaEnv.VITE_FIREBASE_API_KEY;
   const envProjectId = metaEnv.VITE_FIREBASE_PROJECT_ID;
@@ -53,6 +60,19 @@ export const getStoredFirebaseConfig = (): FirebaseConfig | null => {
       messagingSenderId: metaEnv.VITE_FIREBASE_MESSAGING_SENDER_ID || '',
       appId: metaEnv.VITE_FIREBASE_APP_ID || ''
     };
+  }
+
+  // 3. Fall back to localStorage (user-configured via Admin UI)
+  try {
+    const saved = localStorage.getItem(STORAGE_CONFIG_KEY);
+    if (saved) {
+      const parsed = JSON.parse(saved);
+      if (parsed?.apiKey && parsed?.projectId) {
+        return parsed;
+      }
+    }
+  } catch (e) {
+    console.warn('Failed to parse Firebase config from localStorage:', e);
   }
 
   return null;
