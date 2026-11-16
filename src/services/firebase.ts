@@ -31,12 +31,12 @@ const STORAGE_CONFIG_KEY = 'scanner_sim_firebase_config_v1';
 // config values from the Firebase Console (Project Settings -> General -> Your apps) below:
 // ==============================================================================
 export const PERMANENT_FIREBASE_CONFIG: FirebaseConfig = {
-  apiKey: '',
-  authDomain: '',
-  projectId: '',
-  storageBucket: '',
-  messagingSenderId: '',
-  appId: ''
+  apiKey: "AIzaSyA9BNJKPwqZi7Fr7GPw9waMCWWQOoqSSK4",
+  authDomain: "scannersim-a662d.firebaseapp.com",
+  projectId: "scannersim-a662d",
+  storageBucket: "scannersim-a662d.firebasestorage.app",
+  messagingSenderId: "541136184211",
+  appId: "1:541136184211:web:1c89cd83473603df223e66"
 };
 
 // Load config from permanent config, environment variables, or localStorage
