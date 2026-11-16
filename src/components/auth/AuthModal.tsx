@@ -36,6 +36,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
     resendVerificationEmail,
     sendPasswordReset,
     verifyEmailCode,
+    bypassEmailVerification,
     resendVerificationCode,
     pendingEmail,
     verificationCodeSent,
@@ -495,6 +496,21 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                         className="hover:text-slate-200"
                       >
                         Change Email
+                      </button>
+                    </div>
+
+                    <div className="pt-2 text-center border-t border-slate-800/80">
+                      <button
+                        type="button"
+                        onClick={async () => {
+                          setLoading(true);
+                          await bypassEmailVerification();
+                          setStatusMessage('Trial activated successfully!');
+                          setTimeout(() => onClose(), 800);
+                        }}
+                        className="text-[10px] text-cyan-400/90 hover:text-cyan-300 underline font-mono cursor-pointer"
+                      >
+                        Corporate filter holding your email? Click to activate trial directly →
                       </button>
                     </div>
                   </div>

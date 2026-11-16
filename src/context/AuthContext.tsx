@@ -48,6 +48,7 @@ interface AuthContextType {
   sendPasswordReset: (email: string) => Promise<{ success: boolean; error?: string }>;
   activateLicenseKey: (key: string) => Promise<{ success: boolean; error?: string; plan?: SubscriptionPlan; durationDays?: number }>;
   verifyEmailCode: (code: string) => Promise<{ success: boolean; error?: string }>;
+  bypassEmailVerification: () => Promise<void>;
   resendVerificationCode: () => Promise<string>;
   logout: () => void;
   upgradePlan: (plan: 'monthly' | 'half_yearly' | 'yearly') => void;
@@ -508,6 +509,35 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     return { success: true };
   };
 
+  // Direct bypass activation (in case corporate domain firewall/quarantine blocks external email delivery)
+  const bypassEmailVerification = async (): Promise<void> => {
+    const normEmail = (pendingEmail || 'engineer@company.com').toLowerCase().trim();
+    const accounts = getStoredAccounts();
+    const existing = accounts[normEmail];
+
+    const rawUser: UserProfile = {
+      id: existing?.id || auth?.currentUser?.uid || `usr_${Date.now()}`,
+      name: pendingUserData?.name || existing?.name || normEmail.split('@')[0].replace(/[._]/g, ' '),
+      email: normEmail,
+      company: pendingUserData?.company || existing?.company || 'Industrial Automation',
+      isEmailVerified: true,
+      registeredAt: existing?.registeredAt || new Date().toISOString(),
+      plan: existing?.plan || 'trial',
+      planActivatedAt: existing?.planActivatedAt || new Date().toISOString(),
+      trialDaysTotal: TRIAL_DAYS,
+      activeLicenseKey: existing?.activeLicenseKey,
+      licenseDurationDays: existing?.licenseDurationDays,
+      licenseExpiresAt: existing?.licenseExpiresAt
+    };
+
+    const finalUser = syncAccountWithLicenses(rawUser);
+    saveAccountToDb(finalUser);
+    setUser(finalUser);
+    setPendingEmail(null);
+    setPendingUserData(null);
+    setVerificationCodeSent(null);
+  };
+
   const resendVerificationCode = async (): Promise<string> => {
     const newCode = Math.floor(100000 + Math.random() * 900000).toString();
     setVerificationCodeSent(newCode);
@@ -587,6 +617,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         sendPasswordReset,
         activateLicenseKey,
         verifyEmailCode,
+        bypassEmailVerification,
         resendVerificationCode,
         logout,
         upgradePlan,
