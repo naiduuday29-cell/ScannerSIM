@@ -97,6 +97,23 @@ export interface ScannerLibraryPreset {
   createdAt: number;
 }
 
+export interface ScannerMirrorConfig {
+  enabled: boolean;
+  width: number;               // in meters (mirrorWidth)
+  height: number;              // in meters (mirrorHeight)
+  distanceFromScanner: number; // in meters (Distance A from scanner lens)
+  position: {
+    x: number; // relative to conveyor center (m)
+    y: number; // relative to conveyor surface (m)
+    z: number; // relative to conveyor center (m)
+  };
+  rotation: {
+    pitch: number; // degrees
+    roll: number;  // degrees
+    yaw: number;   // degrees
+  };
+}
+
 export interface Scanner {
   id: string;
   name: string;
@@ -114,6 +131,12 @@ export interface Scanner {
   };
   optical: OpticalSpecs;
   color: string;
+
+  // 3D Optical Mirror Reflection & Aperture Configuration
+  hasMirror?: boolean;
+  mirrorWidth?: number;  // in meters
+  mirrorHeight?: number; // in meters
+  mirror?: ScannerMirrorConfig;
 }
 
 export interface MotionSimulation {

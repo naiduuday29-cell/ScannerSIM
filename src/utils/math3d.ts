@@ -99,6 +99,287 @@ export function createFrustumWireframeGeometry(
 }
 
 /**
+ * Creates a truncated pyramid BufferGeometry for a reflected frustum segment
+ * expanding from the mirror base along reflected ray R
+ */
+export function createReflectedFrustumSegmentGeometry(
+  sStart: number,
+  sEnd: number,
+  distA: number,
+  wBase: number,
+  hBase: number
+): THREE.BufferGeometry {
+  const safeDistA = Math.max(0.01, distA);
+  const factorN = (safeDistA + sStart) / safeDistA;
+  const factorF = (safeDistA + sEnd) / safeDistA;
+
+  const xn = (wBase / 2) * factorN;
+  const yn = (hBase / 2) * factorN;
+  const zn = -sStart;
+
+  const xf = (wBase / 2) * factorF;
+  const yf = (hBase / 2) * factorF;
+  const zf = -sEnd;
+
+  const v = [
+    -xn,  yn, zn, // 0
+     xn,  yn, zn, // 1
+     xn, -yn, zn, // 2
+    -xn, -yn, zn, // 3
+    -xf,  yf, zf, // 4
+     xf,  yf, zf, // 5
+     xf, -yf, zf, // 6
+    -xf, -yf, zf  // 7
+  ];
+
+  const indices = [
+    0, 2, 1,  0, 3, 2, // Near face
+    4, 5, 6,  4, 6, 7, // Far face
+    0, 1, 5,  0, 5, 4, // Top face
+    3, 6, 2,  3, 7, 6, // Bottom face
+    1, 2, 6,  1, 6, 5, // Right face
+    0, 4, 7,  0, 7, 3  // Left face
+  ];
+
+  const geometry = new THREE.BufferGeometry();
+  geometry.setAttribute('position', new THREE.Float32BufferAttribute(v, 3));
+  geometry.setIndex(indices);
+  geometry.computeVertexNormals();
+
+  return geometry;
+}
+
+/**
+ * Creates wireframe line geometry for a reflected frustum segment
+ */
+export function createReflectedFrustumWireframeGeometry(
+  sStart: number,
+  sEnd: number,
+  distA: number,
+  wBase: number,
+  hBase: number
+): THREE.BufferGeometry {
+  const safeDistA = Math.max(0.01, distA);
+  const factorN = (safeDistA + sStart) / safeDistA;
+  const factorF = (safeDistA + sEnd) / safeDistA;
+
+  const xn = (wBase / 2) * factorN;
+  const yn = (hBase / 2) * factorN;
+  const zn = -sStart;
+
+  const xf = (wBase / 2) * factorF;
+  const yf = (hBase / 2) * factorF;
+  const zf = -sEnd;
+
+  const points = [
+    // Near ring
+    new THREE.Vector3(-xn,  yn, zn), new THREE.Vector3( xn,  yn, zn),
+    new THREE.Vector3( xn,  yn, zn), new THREE.Vector3( xn, -yn, zn),
+    new THREE.Vector3( xn, -yn, zn), new THREE.Vector3(-xn, -yn, zn),
+    new THREE.Vector3(-xn, -yn, zn), new THREE.Vector3(-xn,  yn, zn),
+
+    // Far ring
+    new THREE.Vector3(-xf,  yf, zf), new THREE.Vector3( xf,  yf, zf),
+    new THREE.Vector3( xf,  yf, zf), new THREE.Vector3( xf, -yf, zf),
+    new THREE.Vector3( xf, -yf, zf), new THREE.Vector3(-xf, -yf, zf),
+    new THREE.Vector3(-xf, -yf, zf), new THREE.Vector3(-xf,  yf, zf),
+
+    // 4 corner struts
+    new THREE.Vector3(-xn,  yn, zn), new THREE.Vector3(-xf,  yf, zf),
+    new THREE.Vector3( xn,  yn, zn), new THREE.Vector3( xf,  yf, zf),
+    new THREE.Vector3( xn, -yn, zn), new THREE.Vector3( xf, -yf, zf),
+    new THREE.Vector3(-xn, -yn, zn), new THREE.Vector3(-xf, -yf, zf)
+  ];
+
+  return new THREE.BufferGeometry().setFromPoints(points);
+}
+
+export interface FoldedOpticalPath {
+  hasMirror: boolean;
+  distanceA: number; // Standoff distance from scanner lens to mirror center (m)
+  scannerLensPos: THREE.Vector3; // World position of scanner lens
+  mirrorPos: THREE.Vector3; // World position of mirror center
+  mirrorNormal: THREE.Vector3; // Surface normal of mirror (opposing incident ray)
+  mirrorRotationEuler: THREE.Euler; // World Euler rotation of mirror
+  mirrorWidth: number; // Physical mirror width (m)
+  mirrorHeight: number; // Physical mirror height (m)
+  incidentVector: THREE.Vector3; // Unit vector from scanner lens to mirror center
+  reflectedVector: THREE.Vector3; // Unit reflected vector: R = I - 2 * (I . N) * N
+  beamWidthAtMirror: number; // Incoming optical FOV cone width at mirror distance (m)
+  beamHeightAtMirror: number; // Incoming optical FOV cone height at mirror distance (m)
+  clampedBaseWidth: number; // Clamped width of reflected frustum base (m)
+  clampedBaseHeight: number; // Clamped height of reflected frustum base (m)
+  isApertureClipped: boolean; // True if incoming FOV cone exceeds mirror dimensions
+  clippingPercentage: number; // Percentage of beam truncated by mirror aperture
+  reflectedRotation: THREE.Euler; // Euler rotation for reflected frustum group pointing along R
+  mirrorLocalAxes: {
+    u: THREE.Vector3; // Mirror local horizontal axis in world space
+    v: THREE.Vector3; // Mirror local vertical axis in world space
+  };
+}
+
+/**
+ * Computes all folded optical path vectors, mirror normal, reflected vector,
+ * and aperture clipping metrics for a scanner with a deflection mirror.
+ */
+export function computeMirrorFoldedPath(
+  scanner: Scanner,
+  conveyorSurfaceY = 0
+): FoldedOpticalPath | null {
+  const hasMirror = Boolean(scanner.hasMirror || scanner.mirror?.enabled);
+  if (!hasMirror) return null;
+
+  const mirrorWidth = scanner.mirror?.width ?? scanner.mirrorWidth ?? 0.25;
+  const mirrorHeight = scanner.mirror?.height ?? scanner.mirrorHeight ?? 0.20;
+
+  // Scanner World Position & Orientation
+  const sPos = new THREE.Vector3(
+    scanner.position.x,
+    conveyorSurfaceY + scanner.position.y,
+    scanner.position.z
+  );
+  const sEuler = new THREE.Euler(
+    THREE.MathUtils.degToRad(scanner.rotation.pitch),
+    THREE.MathUtils.degToRad(scanner.rotation.yaw),
+    THREE.MathUtils.degToRad(scanner.rotation.roll),
+    'YXZ'
+  );
+  const sBoresight = new THREE.Vector3(0, 0, -1).applyEuler(sEuler).normalize();
+  const sUp = new THREE.Vector3(0, 1, 0).applyEuler(sEuler).normalize();
+  const sRight = new THREE.Vector3(1, 0, 0).applyEuler(sEuler).normalize();
+
+  // Mirror World Position
+  let mPos: THREE.Vector3;
+  if (scanner.mirror?.position) {
+    mPos = new THREE.Vector3(
+      scanner.mirror.position.x,
+      conveyorSurfaceY + scanner.mirror.position.y,
+      scanner.mirror.position.z
+    );
+  } else {
+    const distA = scanner.mirror?.distanceFromScanner ?? 0.35;
+    mPos = sPos.clone().addScaledVector(sBoresight, distA);
+  }
+
+  // Incident vector: from scanner lens to mirror center
+  const vInc = mPos.clone().sub(sPos);
+  const distanceA = Math.max(0.001, vInc.length());
+  const incidentVector = vInc.clone().normalize();
+
+  // Mirror Rotation & Local Axes
+  let mEuler: THREE.Euler;
+  if (scanner.mirror?.rotation) {
+    mEuler = new THREE.Euler(
+      THREE.MathUtils.degToRad(scanner.mirror.rotation.pitch),
+      THREE.MathUtils.degToRad(scanner.mirror.rotation.yaw),
+      THREE.MathUtils.degToRad(scanner.mirror.rotation.roll),
+      'YXZ'
+    );
+  } else {
+    // Default 45 deg pitch to deflect downward
+    mEuler = new THREE.Euler(
+      THREE.MathUtils.degToRad(scanner.rotation.pitch + 45),
+      THREE.MathUtils.degToRad(scanner.rotation.yaw),
+      THREE.MathUtils.degToRad(scanner.rotation.roll),
+      'YXZ'
+    );
+  }
+
+  // Mirror surface normal (in world coordinates)
+  const mNormalRaw = new THREE.Vector3(0, 0, 1).applyEuler(mEuler).normalize();
+  const mRight = new THREE.Vector3(1, 0, 0).applyEuler(mEuler).normalize();
+  const mUp = new THREE.Vector3(0, 1, 0).applyEuler(mEuler).normalize();
+
+  // Ensure normal faces opposing the incident vector (I . N <= 0)
+  const mirrorNormal = incidentVector.dot(mNormalRaw) > 0 ? mNormalRaw.clone().negate() : mNormalRaw.clone();
+
+  // Reflected Vector formula: R = I - 2 * (I . N) * N
+  const dotIN = incidentVector.dot(mirrorNormal);
+  const reflectedVector = incidentVector.clone().sub(mirrorNormal.clone().multiplyScalar(2 * dotIN)).normalize();
+
+  // Beam dimensions at mirror distance (Distance A)
+  const tanH = Math.tan(THREE.MathUtils.degToRad(scanner.optical.horizontalFov / 2));
+  const tanV = Math.tan(THREE.MathUtils.degToRad(scanner.optical.verticalFov / 2));
+  const beamWidthAtMirror = 2 * distanceA * tanH;
+  const beamHeightAtMirror = 2 * distanceA * tanV;
+
+  // Aperture Constraint: Clamp reflected frustum base to physical mirror boundaries
+  const clampedBaseWidth = Math.min(beamWidthAtMirror, mirrorWidth);
+  const clampedBaseHeight = Math.min(beamHeightAtMirror, mirrorHeight);
+
+  // Check Aperture Clipping
+  const isApertureClipped = beamWidthAtMirror > mirrorWidth || beamHeightAtMirror > mirrorHeight;
+  const clipPctX = Math.max(0, (beamWidthAtMirror - mirrorWidth) / beamWidthAtMirror) * 100;
+  const clipPctY = Math.max(0, (beamHeightAtMirror - mirrorHeight) / beamHeightAtMirror) * 100;
+  const clippingPercentage = Math.round(Math.max(clipPctX, clipPctY));
+
+  // Compute orientation for reflected frustum group pointing along R (where local -Z is along R)
+  const zRefl = reflectedVector.clone().negate(); // -Z points along R
+  let yReflTentative = sUp.clone().sub(mirrorNormal.clone().multiplyScalar(2 * sUp.dot(mirrorNormal)));
+  if (yReflTentative.clone().cross(zRefl).lengthSq() < 0.001) {
+    yReflTentative = sRight.clone().sub(mirrorNormal.clone().multiplyScalar(2 * sRight.dot(mirrorNormal)));
+  }
+  const xRefl = new THREE.Vector3().crossVectors(yReflTentative, zRefl).normalize();
+  const yRefl = new THREE.Vector3().crossVectors(zRefl, xRefl).normalize();
+
+  const rotMat = new THREE.Matrix4().makeBasis(xRefl, yRefl, zRefl);
+  const reflectedRotation = new THREE.Euler().setFromRotationMatrix(rotMat, 'YXZ');
+
+  return {
+    hasMirror: true,
+    distanceA,
+    scannerLensPos: sPos,
+    mirrorPos: mPos,
+    mirrorNormal,
+    mirrorRotationEuler: mEuler,
+    mirrorWidth,
+    mirrorHeight,
+    incidentVector,
+    reflectedVector,
+    beamWidthAtMirror,
+    beamHeightAtMirror,
+    clampedBaseWidth,
+    clampedBaseHeight,
+    isApertureClipped,
+    clippingPercentage,
+    reflectedRotation,
+    mirrorLocalAxes: {
+      u: mRight,
+      v: mUp
+    }
+  };
+}
+
+/**
+ * Creates default mirror configuration positioned along scanner optical axis
+ */
+export function getDefaultMirrorConfig(scanner: Scanner): import('../types').ScannerMirrorConfig {
+  const distA = 0.35; // 350 mm standoff from lens
+  const pitchRad = THREE.MathUtils.degToRad(scanner.rotation.pitch);
+  const yawRad = THREE.MathUtils.degToRad(scanner.rotation.yaw);
+  const rollRad = THREE.MathUtils.degToRad(scanner.rotation.roll);
+  const euler = new THREE.Euler(pitchRad, yawRad, rollRad, 'YXZ');
+  const forward = new THREE.Vector3(0, 0, -1).applyEuler(euler);
+
+  return {
+    enabled: true,
+    width: 0.25,  // 250 mm
+    height: 0.20, // 200 mm
+    distanceFromScanner: distA,
+    position: {
+      x: Number((scanner.position.x + forward.x * distA).toFixed(3)),
+      y: Number((scanner.position.y + forward.y * distA).toFixed(3)),
+      z: Number((scanner.position.z + forward.z * distA).toFixed(3))
+    },
+    rotation: {
+      pitch: Number((scanner.rotation.pitch + 45).toFixed(1)),
+      roll: scanner.rotation.roll,
+      yaw: scanner.rotation.yaw
+    }
+  };
+}
+
+/**
  * Builds the transformation matrix for a scanner
  */
 export function getScannerMatrix(scanner: Scanner, conveyorSurfaceY: number): THREE.Matrix4 {
@@ -311,10 +592,20 @@ export function testBarcodeScannerIntersection(
   target: BarcodeTargetInfo,
   scanner: Scanner,
   scannerWorldMatrix: THREE.Matrix4,
-  scannerInverseMatrix: THREE.Matrix4
+  scannerInverseMatrix: THREE.Matrix4,
+  conveyorHeight = 0
 ): ScanHitInfo | null {
   if (!scanner.isActive) return null;
 
+  // 1. Folded Optical Path via Mirror
+  if (scanner.hasMirror || scanner.mirror?.enabled) {
+    const mirrorData = computeMirrorFoldedPath(scanner, conveyorHeight);
+    if (mirrorData) {
+      return testFoldedMirrorBarcodeIntersection(target, scanner, mirrorData, scannerInverseMatrix);
+    }
+  }
+
+  // 2. Direct Line-of-Sight
   const scannerPos = new THREE.Vector3().setFromMatrixPosition(scannerWorldMatrix);
   const tanH = Math.tan(THREE.MathUtils.degToRad(scanner.optical.horizontalFov / 2));
   const tanV = Math.tan(THREE.MathUtils.degToRad(scanner.optical.verticalFov / 2));
@@ -358,6 +649,103 @@ export function testBarcodeScannerIntersection(
       scannerId: scanner.id,
       scannerName: scanner.name,
       distance: averageDistance / pointsInValidZone,
+      incidenceAngleDeg,
+      face: target.face,
+      inDofZone: true
+    };
+  }
+
+  return null;
+}
+
+/**
+ * Evaluates barcode target reading through folded mirror reflection with aperture clipping
+ */
+function testFoldedMirrorBarcodeIntersection(
+  target: BarcodeTargetInfo,
+  scanner: Scanner,
+  mirrorData: FoldedOpticalPath,
+  scannerInverseMatrix: THREE.Matrix4
+): ScanHitInfo | null {
+  const {
+    mirrorPos,
+    mirrorNormal,
+    mirrorWidth,
+    mirrorHeight,
+    distanceA,
+    mirrorLocalAxes,
+    scannerLensPos
+  } = mirrorData;
+
+  // 1. Incidence angle on barcode: barcode must face toward mirror
+  const toMirrorVec = new THREE.Vector3().subVectors(mirrorPos, target.center).normalize();
+  const cosIncidence = target.normal.dot(toMirrorVec);
+  if (cosIncidence <= 0.05) {
+    return null;
+  }
+
+  const incidenceAngleDeg = THREE.MathUtils.radToDeg(Math.acos(Math.min(1, Math.max(-1, cosIncidence))));
+  if (incidenceAngleDeg > 70) {
+    return null;
+  }
+
+  const tanH = Math.tan(THREE.MathUtils.degToRad(scanner.optical.horizontalFov / 2));
+  const tanV = Math.tan(THREE.MathUtils.degToRad(scanner.optical.verticalFov / 2));
+
+  let pointsInValidZone = 0;
+  let totalDistanceSum = 0;
+
+  for (const point of target.samplePoints) {
+    // Reflect sample point across the mirror plane to obtain virtual image
+    const vToPlane = point.clone().sub(mirrorPos);
+    const distToPlane = vToPlane.dot(mirrorNormal);
+    const virtualPoint = point.clone().sub(mirrorNormal.clone().multiplyScalar(2 * distToPlane));
+
+    // Physical aperture check: Does ray from scanner lens to virtual target pass through physical mirror?
+    const rayDir = virtualPoint.clone().sub(scannerLensPos);
+    const denom = rayDir.dot(mirrorNormal);
+    if (Math.abs(denom) > 0.0001) {
+      const t = mirrorPos.clone().sub(scannerLensPos).dot(mirrorNormal) / denom;
+      if (t > 0 && t <= 1.0) {
+        const hitOnMirror = scannerLensPos.clone().addScaledVector(rayDir, t);
+        const hitOffset = hitOnMirror.clone().sub(mirrorPos);
+
+        const localX = hitOffset.dot(mirrorLocalAxes.u);
+        const localY = hitOffset.dot(mirrorLocalAxes.v);
+
+        // If ray falls outside physical mirror rectangular aperture, it is clipped
+        if (Math.abs(localX) > mirrorWidth / 2 || Math.abs(localY) > mirrorHeight / 2) {
+          continue;
+        }
+      }
+    }
+
+    // Distance B (from mirror to target)
+    const distanceB = point.distanceTo(mirrorPos);
+    const totalEffectiveDistance = distanceA + distanceB;
+
+    // Transform virtual point into scanner local space
+    const localVirtual = virtualPoint.clone().applyMatrix4(scannerInverseMatrix);
+    const depth = -localVirtual.z;
+
+    if (depth <= 0.05) continue;
+
+    const maxHalfX = depth * tanH;
+    const maxHalfY = depth * tanV;
+
+    if (Math.abs(localVirtual.x) <= maxHalfX && Math.abs(localVirtual.y) <= maxHalfY) {
+      if (totalEffectiveDistance >= scanner.optical.dofNear && totalEffectiveDistance <= scanner.optical.dofFar) {
+        pointsInValidZone++;
+        totalDistanceSum += totalEffectiveDistance;
+      }
+    }
+  }
+
+  if (pointsInValidZone >= 3) {
+    return {
+      scannerId: scanner.id,
+      scannerName: scanner.name,
+      distance: totalDistanceSum / pointsInValidZone,
       incidenceAngleDeg,
       face: target.face,
       inDofZone: true

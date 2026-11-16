@@ -344,7 +344,26 @@ export const SimulatorProvider: React.FC<{ children: ReactNode }> = ({ children 
         ...updates,
         position: updates.position ? { ...s.position, ...updates.position } : s.position,
         rotation: updates.rotation ? { ...s.rotation, ...updates.rotation } : s.rotation,
-        optical: updates.optical ? { ...s.optical, ...updates.optical } : s.optical
+        optical: updates.optical ? { ...s.optical, ...updates.optical } : s.optical,
+        mirror: updates.mirror
+          ? {
+              ...(s.mirror || {
+                enabled: true,
+                width: 0.25,
+                height: 0.20,
+                distanceFromScanner: 0.35,
+                position: { x: 0, y: 0, z: 0 },
+                rotation: { pitch: 0, roll: 0, yaw: 0 }
+              }),
+              ...updates.mirror,
+              position: updates.mirror.position
+                ? { ...(s.mirror?.position || { x: 0, y: 0, z: 0 }), ...updates.mirror.position }
+                : (s.mirror?.position || { x: 0, y: 0, z: 0 }),
+              rotation: updates.mirror.rotation
+                ? { ...(s.mirror?.rotation || { pitch: 0, roll: 0, yaw: 0 }), ...updates.mirror.rotation }
+                : (s.mirror?.rotation || { pitch: 0, roll: 0, yaw: 0 })
+            }
+          : s.mirror
       };
     }));
   }, []);
@@ -717,7 +736,7 @@ export const SimulatorProvider: React.FC<{ children: ReactNode }> = ({ children 
               const sInv = sMat.clone().invert();
 
               for (const t of targets) {
-                const hit = testBarcodeScannerIntersection(t, s, sMat, sInv);
+                const hit = testBarcodeScannerIntersection(t, s, sMat, sInv, conveyor.height);
                 if (hit) {
                   activeHits.push(hit);
                 }

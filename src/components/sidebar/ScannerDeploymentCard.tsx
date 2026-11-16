@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import * as THREE from 'three';
 import {
   ChevronDown,
   ChevronUp,
@@ -13,12 +14,17 @@ import {
   MoreVertical,
   BookOpen,
   Lock,
-  Unlock
+  Unlock,
+  AlertTriangle,
+  CheckCircle2,
+  Maximize2,
+  Sliders
 } from 'lucide-react';
 import { useSimulator } from '../../context/SimulatorContext';
 import { NumberSliderInput } from '../common/NumberSliderInput';
 import { toDisplayLength, fromDisplayLength } from '../../utils/units';
 import { TwoPointFovCalculator } from './TwoPointFovCalculator';
+import { computeMirrorFoldedPath, getDefaultMirrorConfig } from '../../utils/math3d';
 
 export const ScannerDeploymentCard: React.FC = () => {
   const {
@@ -33,7 +39,8 @@ export const ScannerDeploymentCard: React.FC = () => {
     reorderScanners,
     scannerLibrary,
     applyScannerPreset,
-    setIsScannerLibraryOpen
+    setIsScannerLibraryOpen,
+    conveyor
   } = useSimulator();
 
   // Collapsed at opening as requested
@@ -48,6 +55,8 @@ export const ScannerDeploymentCard: React.FC = () => {
   const [openMenuScannerId, setOpenMenuScannerId] = useState<string | null>(null);
   // Input mode per scanner: 'angles' (default) or 'twopoint' (2-distance capture area)
   const [fovInputMode, setFovInputMode] = useState<Record<string, 'angles' | 'twopoint'>>({});
+  // Advanced mirror 3D position disclosure per scanner
+  const [expandedMirrorAdvanced, setExpandedMirrorAdvanced] = useState<Record<string, boolean>>({});
 
   const toggleExpand = (id: string, e: React.MouseEvent) => {
     e.stopPropagation();
@@ -645,6 +654,356 @@ export const ScannerDeploymentCard: React.FC = () => {
                           }}
                         />
                       </div>
+
+                      {/* OPTICAL DEFLECTION MIRROR SECTION */}
+                      {(() => {
+                        const hasMirror = Boolean(scanner.hasMirror || scanner.mirror?.enabled);
+                        const mirrorPath = hasMirror ? computeMirrorFoldedPath(scanner, conveyor.height) : null;
+                        const isMirrorAdvOpen = Boolean(expandedMirrorAdvanced[scanner.id]);
+
+                        return (
+                          <div className="space-y-2.5 pt-2 border-t border-slate-800">
+                            {/* Section Header with Enable/Disable Toggle */}
+                            <div className="flex items-center justify-between text-[11px]">
+                              <div className="flex items-center gap-1.5">
+                                <span className="font-semibold text-cyan-400">Optical Deflection Mirror</span>
+                                <span className="px-1.5 py-0.2 bg-cyan-950/80 border border-cyan-500/30 text-cyan-300 text-[9px] font-mono rounded">
+                                  FOLDED PATH
+                                </span>
+                              </div>
+                              <button
+                                type="button"
+                                disabled={scanner.isLocked}
+                                onClick={() => {
+                                  if (hasMirror) {
+                                    updateScanner(scanner.id, {
+                                      hasMirror: false,
+                                      mirror: {
+                                        ...(scanner.mirror || getDefaultMirrorConfig(scanner)),
+                                        enabled: false
+                                      }
+                                    });
+                                  } else {
+                                    const defaultCfg = scanner.mirror || getDefaultMirrorConfig(scanner);
+                                    updateScanner(scanner.id, {
+                                      hasMirror: true,
+                                      mirrorWidth: defaultCfg.width,
+                                      mirrorHeight: defaultCfg.height,
+                                      mirror: {
+                                        ...defaultCfg,
+                                        enabled: true
+                                      }
+                                    });
+                                  }
+                                }}
+                                className={`px-2.5 py-0.5 rounded-full text-[10px] font-mono font-bold transition-all border cursor-pointer ${
+                                  hasMirror
+                                    ? 'bg-cyan-500/20 text-cyan-300 border-cyan-500/50 shadow-sm shadow-cyan-950/40'
+                                    : 'bg-slate-900 text-slate-500 border-slate-700 hover:text-slate-300'
+                                } ${scanner.isLocked ? 'opacity-40 cursor-not-allowed' : ''}`}
+                              >
+                                {hasMirror ? 'MIRROR ACTIVE' : 'NO MIRROR'}
+                              </button>
+                            </div>
+
+                            {/* MIRROR CONTROLS (Rendered when mirror is enabled) */}
+                            {hasMirror && mirrorPath && (
+                              <div className="space-y-2.5 p-2.5 rounded-lg bg-cyan-950/20 border border-cyan-900/50">
+                                {/* Aperture Status Alert / Warning */}
+                                {mirrorPath.isApertureClipped ? (
+                                  <div className="p-2.5 rounded-lg bg-amber-950/40 border border-amber-500/60 shadow-sm text-[11px] space-y-1.5 animate-pulse">
+                                    <div className="flex items-center gap-1.5 font-bold text-amber-300">
+                                      <AlertTriangle className="w-4 h-4 flex-shrink-0 text-amber-400" />
+                                      <span>Aperture Clipped Warning ({mirrorPath.clippingPercentage}% beam lost)</span>
+                                    </div>
+                                    <p className="text-[10px] text-amber-200/90 leading-relaxed">
+                                      Incoming scanner beam ({Math.round(mirrorPath.beamWidthAtMirror * 1000)} × {Math.round(mirrorPath.beamHeightAtMirror * 1000)} mm) exceeds mirror aperture ({Math.round(mirrorPath.mirrorWidth * 1000)} × {Math.round(mirrorPath.mirrorHeight * 1000)} mm). Excess optical rays are clipped by the physical mirror boundaries.
+                                    </p>
+                                    <div className="pt-1 flex items-center justify-between">
+                                      <button
+                                        type="button"
+                                        disabled={scanner.isLocked}
+                                        onClick={() => {
+                                          const fitW = Math.ceil(mirrorPath.beamWidthAtMirror * 1.15 * 100) / 100;
+                                          const fitH = Math.ceil(mirrorPath.beamHeightAtMirror * 1.15 * 100) / 100;
+                                          updateScanner(scanner.id, {
+                                            mirrorWidth: fitW,
+                                            mirrorHeight: fitH,
+                                            mirror: {
+                                              ...(scanner.mirror || getDefaultMirrorConfig(scanner)),
+                                              width: fitW,
+                                              height: fitH
+                                            }
+                                          });
+                                        }}
+                                        className="flex items-center gap-1 px-2.5 py-1 rounded bg-amber-500/25 hover:bg-amber-500/40 text-amber-200 border border-amber-500/50 text-[10px] font-mono font-semibold transition-all cursor-pointer shadow-sm"
+                                      >
+                                        <Maximize2 className="w-3 h-3" />
+                                        <span>Auto-Fit Mirror to FOV (+15%)</span>
+                                      </button>
+                                    </div>
+                                  </div>
+                                ) : (
+                                  <div className="p-2 rounded-lg bg-emerald-950/30 border border-emerald-500/30 text-[10px] text-emerald-300 flex items-center justify-between">
+                                    <div className="flex items-center gap-1.5 font-semibold">
+                                      <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
+                                      <span>Aperture 100% Clear</span>
+                                    </div>
+                                    <span className="font-mono text-emerald-400/80 text-[9px]">
+                                      Beam: {Math.round(mirrorPath.beamWidthAtMirror * 1000)}×{Math.round(mirrorPath.beamHeightAtMirror * 1000)} mm
+                                    </span>
+                                  </div>
+                                )}
+
+                                {/* Telemetry Details */}
+                                <div className="grid grid-cols-2 gap-1.5 text-[10px] font-mono text-slate-300 bg-slate-900/60 p-2 rounded border border-slate-800">
+                                  <div>
+                                    <span className="text-slate-500 block text-[9px]">DISTANCE A (LENS→MIRROR)</span>
+                                    <span className="text-cyan-300 font-semibold">
+                                      {toDisplayLength(mirrorPath.distanceA, dimUnit).toFixed(0)} {dimUnit}
+                                    </span>
+                                  </div>
+                                  <div>
+                                    <span className="text-slate-500 block text-[9px]">COMBINED WORKING DIST</span>
+                                    <span className="text-emerald-300 font-semibold">
+                                      Dist A + Dist B
+                                    </span>
+                                  </div>
+                                </div>
+
+                                {/* Mirror Width Slider */}
+                                <NumberSliderInput
+                                  label="Mirror Physical Width"
+                                  tooltip="Physical width of the planar mirror aperture."
+                                  value={toDisplayLength(scanner.mirror?.width ?? scanner.mirrorWidth ?? 0.25, dimUnit)}
+                                  unit={dimUnit}
+                                  min={dimUnit === 'mm' ? 50 : dimUnit === 'in' ? 2 : 0.05}
+                                  max={dimUnit === 'mm' ? 800 : dimUnit === 'in' ? 32 : 0.8}
+                                  step={posStep}
+                                  disabled={scanner.isLocked}
+                                  accentColor="accent-cyan-400"
+                                  onChange={(val) => {
+                                    const w = fromDisplayLength(val, dimUnit);
+                                    updateScanner(scanner.id, {
+                                      mirrorWidth: w,
+                                      mirror: {
+                                        ...(scanner.mirror || getDefaultMirrorConfig(scanner)),
+                                        width: w
+                                      }
+                                    });
+                                  }}
+                                />
+
+                                {/* Mirror Height Slider */}
+                                <NumberSliderInput
+                                  label="Mirror Physical Height"
+                                  tooltip="Physical height of the planar mirror aperture."
+                                  value={toDisplayLength(scanner.mirror?.height ?? scanner.mirrorHeight ?? 0.20, dimUnit)}
+                                  unit={dimUnit}
+                                  min={dimUnit === 'mm' ? 50 : dimUnit === 'in' ? 2 : 0.05}
+                                  max={dimUnit === 'mm' ? 800 : dimUnit === 'in' ? 32 : 0.8}
+                                  step={posStep}
+                                  disabled={scanner.isLocked}
+                                  accentColor="accent-cyan-400"
+                                  onChange={(val) => {
+                                    const h = fromDisplayLength(val, dimUnit);
+                                    updateScanner(scanner.id, {
+                                      mirrorHeight: h,
+                                      mirror: {
+                                        ...(scanner.mirror || getDefaultMirrorConfig(scanner)),
+                                        height: h
+                                      }
+                                    });
+                                  }}
+                                />
+
+                                {/* Distance A (Mirror Standoff from Scanner Lens) */}
+                                <NumberSliderInput
+                                  label="Distance A (Lens Standoff)"
+                                  tooltip="Standoff distance along scanner optical boresight from lens to mirror center."
+                                  value={toDisplayLength(mirrorPath.distanceA, dimUnit)}
+                                  unit={dimUnit}
+                                  min={dimUnit === 'mm' ? 100 : dimUnit === 'in' ? 4 : 0.1}
+                                  max={dimUnit === 'mm' ? 1200 : dimUnit === 'in' ? 48 : 1.2}
+                                  step={posStep}
+                                  disabled={scanner.isLocked}
+                                  accentColor="accent-cyan-400"
+                                  onChange={(val) => {
+                                    const distA = fromDisplayLength(val, dimUnit);
+                                    const pitchRad = THREE.MathUtils.degToRad(scanner.rotation.pitch);
+                                    const yawRad = THREE.MathUtils.degToRad(scanner.rotation.yaw);
+                                    const rollRad = THREE.MathUtils.degToRad(scanner.rotation.roll);
+                                    const euler = new THREE.Euler(pitchRad, yawRad, rollRad, 'YXZ');
+                                    const forward = new THREE.Vector3(0, 0, -1).applyEuler(euler);
+                                    const newPos = {
+                                      x: Number((scanner.position.x + forward.x * distA).toFixed(3)),
+                                      y: Number((scanner.position.y + forward.y * distA).toFixed(3)),
+                                      z: Number((scanner.position.z + forward.z * distA).toFixed(3))
+                                    };
+                                    updateScanner(scanner.id, {
+                                      mirror: {
+                                        ...(scanner.mirror || getDefaultMirrorConfig(scanner)),
+                                        distanceFromScanner: distA,
+                                        position: newPos
+                                      }
+                                    });
+                                  }}
+                                />
+
+                                {/* Quick Alignment Presets */}
+                                <div className="space-y-1 pt-1">
+                                  <span className="text-[10px] text-slate-400 font-medium">Quick Deflection Presets</span>
+                                  <div className="grid grid-cols-2 gap-1.5">
+                                    <button
+                                      type="button"
+                                      disabled={scanner.isLocked}
+                                      onClick={() => {
+                                        // 90° Downward Fold: deflect optical axis straight down
+                                        updateScanner(scanner.id, {
+                                          mirror: {
+                                            ...(scanner.mirror || getDefaultMirrorConfig(scanner)),
+                                            rotation: {
+                                              pitch: Number((scanner.rotation.pitch + 45).toFixed(1)),
+                                              roll: scanner.rotation.roll,
+                                              yaw: scanner.rotation.yaw
+                                            }
+                                          }
+                                        });
+                                      }}
+                                      className="px-2 py-1 rounded bg-slate-900 hover:bg-slate-800 text-slate-200 border border-slate-700 hover:border-cyan-500/50 text-[10px] font-mono text-center transition-colors cursor-pointer disabled:opacity-50"
+                                    >
+                                      90° Down Fold
+                                    </button>
+                                    <button
+                                      type="button"
+                                      disabled={scanner.isLocked}
+                                      onClick={() => {
+                                        // 45° Lateral Fold
+                                        updateScanner(scanner.id, {
+                                          mirror: {
+                                            ...(scanner.mirror || getDefaultMirrorConfig(scanner)),
+                                            rotation: {
+                                              pitch: scanner.rotation.pitch,
+                                              roll: scanner.rotation.roll,
+                                              yaw: Number((scanner.rotation.yaw + 45).toFixed(1))
+                                            }
+                                          }
+                                        });
+                                      }}
+                                      className="px-2 py-1 rounded bg-slate-900 hover:bg-slate-800 text-slate-200 border border-slate-700 hover:border-cyan-500/50 text-[10px] font-mono text-center transition-colors cursor-pointer disabled:opacity-50"
+                                    >
+                                      45° Lateral Fold
+                                    </button>
+                                  </div>
+                                </div>
+
+                                {/* Advanced 3D Position & Rotation Disclosure */}
+                                <div className="pt-1 border-t border-slate-800/80">
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setExpandedMirrorAdvanced(prev => ({
+                                        ...prev,
+                                        [scanner.id]: !prev[scanner.id]
+                                      }));
+                                    }}
+                                    className="flex items-center justify-between w-full text-[10px] font-mono text-slate-400 hover:text-cyan-300 transition-colors py-1 cursor-pointer"
+                                  >
+                                    <span className="flex items-center gap-1">
+                                      <Sliders className="w-3 h-3" />
+                                      <span>Advanced Mirror 3D Positioning</span>
+                                    </span>
+                                    {isMirrorAdvOpen ? (
+                                      <ChevronUp className="w-3.5 h-3.5" />
+                                    ) : (
+                                      <ChevronDown className="w-3.5 h-3.5" />
+                                    )}
+                                  </button>
+
+                                  {isMirrorAdvOpen && (
+                                    <div className="space-y-2 pt-2 pb-1 text-[10px]">
+                                      {/* Mirror Pitch Angle */}
+                                      <NumberSliderInput
+                                        label="Mirror Pitch Angle"
+                                        value={scanner.mirror?.rotation?.pitch ?? Number((scanner.rotation.pitch + 45).toFixed(1))}
+                                        unit="°"
+                                        min={-90}
+                                        max={90}
+                                        step={1}
+                                        precision={0}
+                                        disabled={scanner.isLocked}
+                                        accentColor="accent-emerald-400"
+                                        onChange={(val) => {
+                                          updateScanner(scanner.id, {
+                                            mirror: {
+                                              ...(scanner.mirror || getDefaultMirrorConfig(scanner)),
+                                              rotation: {
+                                                pitch: val,
+                                                roll: scanner.mirror?.rotation?.roll ?? scanner.rotation.roll,
+                                                yaw: scanner.mirror?.rotation?.yaw ?? scanner.rotation.yaw
+                                              }
+                                            }
+                                          });
+                                        }}
+                                      />
+
+                                      {/* Mirror Yaw Angle */}
+                                      <NumberSliderInput
+                                        label="Mirror Yaw Angle"
+                                        value={scanner.mirror?.rotation?.yaw ?? scanner.rotation.yaw}
+                                        unit="°"
+                                        min={-180}
+                                        max={180}
+                                        step={1}
+                                        precision={0}
+                                        disabled={scanner.isLocked}
+                                        accentColor="accent-emerald-400"
+                                        onChange={(val) => {
+                                          updateScanner(scanner.id, {
+                                            mirror: {
+                                              ...(scanner.mirror || getDefaultMirrorConfig(scanner)),
+                                              rotation: {
+                                                pitch: scanner.mirror?.rotation?.pitch ?? Number((scanner.rotation.pitch + 45).toFixed(1)),
+                                                roll: scanner.mirror?.rotation?.roll ?? scanner.rotation.roll,
+                                                yaw: val
+                                              }
+                                            }
+                                          });
+                                        }}
+                                      />
+
+                                      {/* Mirror Roll Angle */}
+                                      <NumberSliderInput
+                                        label="Mirror Roll Angle"
+                                        value={scanner.mirror?.rotation?.roll ?? scanner.rotation.roll}
+                                        unit="°"
+                                        min={-180}
+                                        max={180}
+                                        step={1}
+                                        precision={0}
+                                        disabled={scanner.isLocked}
+                                        accentColor="accent-emerald-400"
+                                        onChange={(val) => {
+                                          updateScanner(scanner.id, {
+                                            mirror: {
+                                              ...(scanner.mirror || getDefaultMirrorConfig(scanner)),
+                                              rotation: {
+                                                pitch: scanner.mirror?.rotation?.pitch ?? Number((scanner.rotation.pitch + 45).toFixed(1)),
+                                                roll: val,
+                                                yaw: scanner.mirror?.rotation?.yaw ?? scanner.rotation.yaw
+                                              }
+                                            }
+                                          });
+                                        }}
+                                      />
+                                    </div>
+                                  )}
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })()}
                     </div>
                   )}
                 </div>
