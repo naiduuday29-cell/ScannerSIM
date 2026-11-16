@@ -150,13 +150,14 @@ export const ViewCube: React.FC = () => {
           </div>
         )}
 
-        {/* Isometric Snap Button in corner */}
+        {/* Reset to Bird's Eye View button in corner */}
         <button
-          onClick={() => snapCameraTo('ISOMETRIC')}
-          title="Snap to Isometric View"
-          className="absolute top-1.5 right-1.5 z-10 p-1 text-slate-400 hover:text-cyan-400 bg-slate-800/70 hover:bg-slate-700 rounded transition-all"
+          onClick={() => snapCameraTo('BIRDS_EYE')}
+          title="Reset to Bird's Eye View"
+          className="absolute top-1.5 right-1.5 z-10 flex items-center gap-1 px-1.5 py-0.5 text-[9px] font-mono text-cyan-300 hover:text-cyan-100 bg-cyan-950/80 hover:bg-cyan-900 border border-cyan-700/80 rounded transition-all shadow-sm cursor-pointer"
         >
-          <RotateCcw className="w-2.5 h-2.5" />
+          <RotateCcw className="w-2.5 h-2.5 text-cyan-400" />
+          <span>Reset</span>
         </button>
 
         {/* The Isolated Secondary Three.js Canvas */}

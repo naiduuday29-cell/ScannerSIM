@@ -194,6 +194,72 @@ export function createReflectedFrustumWireframeGeometry(
   return new THREE.BufferGeometry().setFromPoints(points);
 }
 
+/**
+ * Creates BufferGeometry for a general 8-vertex polyhedron (frustum segment)
+ * nearPts[0..3] (top-left, top-right, bottom-right, bottom-left)
+ * farPts[0..3]  (top-left, top-right, bottom-right, bottom-left)
+ */
+export function createPolyhedronGeometry(
+  nearPts: THREE.Vector3[],
+  farPts: THREE.Vector3[]
+): THREE.BufferGeometry {
+  const v = [
+    nearPts[0].x, nearPts[0].y, nearPts[0].z, // 0
+    nearPts[1].x, nearPts[1].y, nearPts[1].z, // 1
+    nearPts[2].x, nearPts[2].y, nearPts[2].z, // 2
+    nearPts[3].x, nearPts[3].y, nearPts[3].z, // 3
+    farPts[0].x,  farPts[0].y,  farPts[0].z,  // 4
+    farPts[1].x,  farPts[1].y,  farPts[1].z,  // 5
+    farPts[2].x,  farPts[2].y,  farPts[2].z,  // 6
+    farPts[3].x,  farPts[3].y,  farPts[3].z   // 7
+  ];
+
+  const indices = [
+    0, 2, 1,  0, 3, 2, // Near face
+    4, 5, 6,  4, 6, 7, // Far face
+    0, 1, 5,  0, 5, 4, // Top face
+    3, 6, 2,  3, 7, 6, // Bottom face
+    1, 2, 6,  1, 6, 5, // Right face
+    0, 4, 7,  0, 7, 3  // Left face
+  ];
+
+  const geometry = new THREE.BufferGeometry();
+  geometry.setAttribute('position', new THREE.Float32BufferAttribute(v, 3));
+  geometry.setIndex(indices);
+  geometry.computeVertexNormals();
+  return geometry;
+}
+
+/**
+ * Creates wireframe lines for a general 8-vertex polyhedron
+ */
+export function createPolyhedronWireframeGeometry(
+  nearPts: THREE.Vector3[],
+  farPts: THREE.Vector3[]
+): THREE.BufferGeometry {
+  const points = [
+    // Near ring
+    nearPts[0], nearPts[1],
+    nearPts[1], nearPts[2],
+    nearPts[2], nearPts[3],
+    nearPts[3], nearPts[0],
+
+    // Far ring
+    farPts[0], farPts[1],
+    farPts[1], farPts[2],
+    farPts[2], farPts[3],
+    farPts[3], farPts[0],
+
+    // 4 corner struts
+    nearPts[0], farPts[0],
+    nearPts[1], farPts[1],
+    nearPts[2], farPts[2],
+    nearPts[3], farPts[3]
+  ];
+
+  return new THREE.BufferGeometry().setFromPoints(points);
+}
+
 export interface FoldedOpticalPath {
   hasMirror: boolean;
   distanceA: number; // Standoff distance from scanner lens to mirror center (m)
@@ -216,6 +282,10 @@ export interface FoldedOpticalPath {
     u: THREE.Vector3; // Mirror local horizontal axis in world space
     v: THREE.Vector3; // Mirror local vertical axis in world space
   };
+  // Exact 3D world-space coordinates for seamless beam-to-mirror coupling
+  lensCornersWorld: THREE.Vector3[];
+  mirrorApertureCornersWorld: THREE.Vector3[];
+  reflectedCornerRayDirs: THREE.Vector3[];
 }
 
 /**
@@ -325,6 +395,33 @@ export function computeMirrorFoldedPath(
   const rotMat = new THREE.Matrix4().makeBasis(xRefl, yRefl, zRefl);
   const reflectedRotation = new THREE.Euler().setFromRotationMatrix(rotMat, 'YXZ');
 
+  // Exact 3D coordinates for flush boundary matching:
+  // 1. Lens front face corners at standoff 0.04m from scanner nodal point
+  const dLens = 0.04;
+  const lensCornersWorld: THREE.Vector3[] = [
+    sPos.clone().addScaledVector(sBoresight, dLens).addScaledVector(sRight, -dLens * tanH).addScaledVector(sUp, dLens * tanV),
+    sPos.clone().addScaledVector(sBoresight, dLens).addScaledVector(sRight, dLens * tanH).addScaledVector(sUp, dLens * tanV),
+    sPos.clone().addScaledVector(sBoresight, dLens).addScaledVector(sRight, dLens * tanH).addScaledVector(sUp, -dLens * tanV),
+    sPos.clone().addScaledVector(sBoresight, dLens).addScaledVector(sRight, -dLens * tanH).addScaledVector(sUp, -dLens * tanV)
+  ];
+
+  // 2. Exact illuminated aperture corners ON the mirror plane surface
+  const wHalf = clampedBaseWidth / 2;
+  const hHalf = clampedBaseHeight / 2;
+  const mirrorApertureCornersWorld: THREE.Vector3[] = [
+    mPos.clone().addScaledVector(mRight, -wHalf).addScaledVector(mUp, hHalf),
+    mPos.clone().addScaledVector(mRight, wHalf).addScaledVector(mUp, hHalf),
+    mPos.clone().addScaledVector(mRight, wHalf).addScaledVector(mUp, -hHalf),
+    mPos.clone().addScaledVector(mRight, -wHalf).addScaledVector(mUp, -hHalf)
+  ];
+
+  // 3. Exact reflected ray vector emerging from each of the 4 aperture corners
+  const reflectedCornerRayDirs = mirrorApertureCornersWorld.map((cornerPt) => {
+    const incVec = cornerPt.clone().sub(sPos).normalize();
+    const dotC = incVec.dot(mirrorNormal);
+    return incVec.clone().sub(mirrorNormal.clone().multiplyScalar(2 * dotC)).normalize();
+  });
+
   return {
     hasMirror: true,
     distanceA,
@@ -346,7 +443,10 @@ export function computeMirrorFoldedPath(
     mirrorLocalAxes: {
       u: mRight,
       v: mUp
-    }
+    },
+    lensCornersWorld,
+    mirrorApertureCornersWorld,
+    reflectedCornerRayDirs
   };
 }
 

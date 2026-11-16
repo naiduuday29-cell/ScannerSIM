@@ -7,12 +7,13 @@ import {
   GitCommit,
   Radio,
   RotateCcw,
-  Maximize2
+  Maximize2,
+  Hand
 } from 'lucide-react';
 import { useSimulator } from '../../context/SimulatorContext';
 
 export const CanvasToolbar: React.FC = () => {
-  const { viewSettings, updateViewSettings, snapCameraTo } = useSimulator();
+  const { viewSettings, updateViewSettings, snapCameraTo, isPanModeActive, togglePanMode } = useSimulator();
 
   const handleFullscreen = () => {
     if (!document.fullscreenElement) {
@@ -87,11 +88,25 @@ export const CanvasToolbar: React.FC = () => {
 
       <div className="w-px h-4 bg-slate-800 mx-1" />
 
-      {/* Camera Reset */}
+      {/* Pan Mode Tool Toggle */}
       <button
-        onClick={() => snapCameraTo('ISOMETRIC')}
-        title="Reset Camera View to Isometric"
-        className="p-1.5 rounded-lg text-slate-400 hover:text-cyan-300 hover:bg-slate-800/60 transition-colors"
+        onClick={togglePanMode}
+        title={isPanModeActive ? 'Pan Tool Active (Left-Click to Pan). Click for Orbit.' : 'Orbit Tool Active. Click to enable Left-Click Pan Tool.'}
+        className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg font-mono text-[11px] transition-all cursor-pointer ${
+          isPanModeActive
+            ? 'bg-amber-500/25 text-amber-300 border border-amber-500/50 shadow-sm'
+            : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
+        }`}
+      >
+        <Hand className="w-3.5 h-3.5" />
+        <span className="hidden md:inline">{isPanModeActive ? 'Pan Tool' : 'Pan'}</span>
+      </button>
+
+      {/* Camera Reset to Bird's Eye View */}
+      <button
+        onClick={() => snapCameraTo('BIRDS_EYE')}
+        title="Reset Camera to Bird's Eye View"
+        className="p-1.5 rounded-lg text-slate-400 hover:text-cyan-300 hover:bg-slate-800/60 transition-colors cursor-pointer"
       >
         <RotateCcw className="w-3.5 h-3.5" />
       </button>
@@ -100,7 +115,7 @@ export const CanvasToolbar: React.FC = () => {
       <button
         onClick={handleFullscreen}
         title="Toggle Fullscreen"
-        className="p-1.5 rounded-lg text-slate-400 hover:text-cyan-300 hover:bg-slate-800/60 transition-colors"
+        className="p-1.5 rounded-lg text-slate-400 hover:text-cyan-300 hover:bg-slate-800/60 transition-colors cursor-pointer"
       >
         <Maximize2 className="w-3.5 h-3.5" />
       </button>

@@ -51,6 +51,7 @@ export const ScannerDeploymentCard: React.FC = () => {
   // Drag and drop reordering state
   const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
   const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
+  const [canDragScannerId, setCanDragScannerId] = useState<string | null>(null);
   // 3-dots dropdown menu state
   const [openMenuScannerId, setOpenMenuScannerId] = useState<string | null>(null);
   // Input mode per scanner: 'angles' (default) or 'twopoint' (2-distance capture area)
@@ -122,7 +123,7 @@ export const ScannerDeploymentCard: React.FC = () => {
               return (
                 <div
                   key={scanner.id}
-                  draggable
+                  draggable={canDragScannerId === scanner.id}
                   onDragStart={(e) => {
                     const target = e.target as HTMLElement;
                     if (
@@ -157,10 +158,12 @@ export const ScannerDeploymentCard: React.FC = () => {
                     }
                     setDraggedIndex(null);
                     setDragOverIndex(null);
+                    setCanDragScannerId(null);
                   }}
                   onDragEnd={() => {
                     setDraggedIndex(null);
                     setDragOverIndex(null);
+                    setCanDragScannerId(null);
                   }}
                   onClick={() => setSelectedScannerId(scanner.id)}
                   className={`rounded-lg border transition-all ${
@@ -180,6 +183,11 @@ export const ScannerDeploymentCard: React.FC = () => {
                       <div
                         className="p-1 text-slate-500 hover:text-cyan-400 cursor-grab active:cursor-grabbing rounded hover:bg-slate-800 transition-colors flex-shrink-0"
                         title="Drag and drop to reorder scanner in array"
+                        onMouseEnter={() => setCanDragScannerId(scanner.id)}
+                        onMouseLeave={() => {
+                          if (draggedIndex === null) setCanDragScannerId(null);
+                        }}
+                        onMouseDown={() => setCanDragScannerId(scanner.id)}
                       >
                         <GripVertical className="w-3.5 h-3.5" />
                       </div>

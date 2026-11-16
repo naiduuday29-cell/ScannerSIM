@@ -6,8 +6,8 @@ import { useSimulator } from '../../context/SimulatorContext';
 import {
   createFrustumSegmentGeometry,
   createFrustumWireframeGeometry,
-  createReflectedFrustumSegmentGeometry,
-  createReflectedFrustumWireframeGeometry,
+  createPolyhedronGeometry,
+  createPolyhedronWireframeGeometry,
   computeMirrorFoldedPath
 } from '../../utils/math3d';
 
@@ -56,76 +56,77 @@ export const ScannerFrustum: React.FC<ScannerFrustumProps> = ({ scanner }) => {
     [mirrorPath, dofFar, maxRange, horizontalFov, verticalFov]
   );
 
-  // Primary Frustum Geometries (Lens to Mirror surface, up to distanceA)
-  const primaryGeometries = useMemo(() => {
+  // Seamless Folded Optical Beam Geometries (Flush to Mirror Surface)
+  const foldedGeometries = useMemo(() => {
     if (!mirrorPath) return null;
     const dA = mirrorPath.distanceA;
+    const lensPts = mirrorPath.lensCornersWorld;
+    const mirrorPts = mirrorPath.mirrorApertureCornersWorld;
+    const rayDirs = mirrorPath.reflectedCornerRayDirs;
 
-    // Red zone: from 0.04 to min(dA, dofNear)
-    const redEnd = Math.min(dA, dofNear);
-    const hasRed = redEnd > 0.04;
-    const nearVol = hasRed ? createFrustumSegmentGeometry(0.04, redEnd, horizontalFov, verticalFov) : null;
-    const nearWire = hasRed ? createFrustumWireframeGeometry(0.04, redEnd, horizontalFov, verticalFov) : null;
+    // 1. Primary Beam (Lens Face -> Flush on Mirror Aperture Surface)
+    const isPrimaryBlind = dA <= dofNear;
+    const primaryVol = createPolyhedronGeometry(lensPts, mirrorPts);
+    const primaryWire = createPolyhedronWireframeGeometry(lensPts, mirrorPts);
 
-    // Green zone: if dA > dofNear, from dofNear to min(dA, dofFar)
-    const greenStart = dofNear;
-    const greenEnd = Math.min(dA, dofFar);
-    const hasGreen = dA > dofNear && greenEnd > greenStart;
-    const validVol = hasGreen ? createFrustumSegmentGeometry(greenStart, greenEnd, horizontalFov, verticalFov) : null;
-    const validWire = hasGreen ? createFrustumWireframeGeometry(greenStart, greenEnd, horizontalFov, verticalFov) : null;
+    // 2. Reflected Red Zone (Blind spot / Too close): Distance A + s < dofNear
+    const hasReflRed = dA < dofNear;
+    const sRedEnd = Math.max(0, dofNear - dA);
+    let reflRedVol: THREE.BufferGeometry | null = null;
+    let reflRedWire: THREE.BufferGeometry | null = null;
+    if (hasReflRed && sRedEnd > 0.005) {
+      const redNearPts = mirrorPts; // Directly on mirror surface
+      const redFarPts = mirrorPts.map((pt, k) => pt.clone().addScaledVector(rayDirs[k], sRedEnd));
+      reflRedVol = createPolyhedronGeometry(redNearPts, redFarPts);
+      reflRedWire = createPolyhedronWireframeGeometry(redNearPts, redFarPts);
+    }
 
-    // Yellow zone: if dA > dofFar, from dofFar to dA
-    const yellowStart = dofFar;
-    const yellowEnd = dA;
-    const hasYellow = dA > dofFar && yellowEnd > yellowStart;
-    const farVol = hasYellow ? createFrustumSegmentGeometry(yellowStart, yellowEnd, horizontalFov, verticalFov) : null;
-    const farWire = hasYellow ? createFrustumWireframeGeometry(yellowStart, yellowEnd, horizontalFov, verticalFov) : null;
+    // 3. Reflected Green Zone (Valid DOF reading range): dofNear <= Distance A + s <= dofFar
+    const sGreenStart = Math.max(0, dofNear - dA);
+    const sGreenEnd = Math.max(0, dofFar - dA);
+    const hasReflGreen = sGreenEnd > sGreenStart + 0.01;
+    let reflGreenVol: THREE.BufferGeometry | null = null;
+    let reflGreenWire: THREE.BufferGeometry | null = null;
+    if (hasReflGreen) {
+      const greenNearPts = mirrorPts.map((pt, k) => pt.clone().addScaledVector(rayDirs[k], sGreenStart));
+      const greenFarPts = mirrorPts.map((pt, k) => pt.clone().addScaledVector(rayDirs[k], sGreenEnd));
+      reflGreenVol = createPolyhedronGeometry(greenNearPts, greenFarPts);
+      reflGreenWire = createPolyhedronWireframeGeometry(greenNearPts, greenFarPts);
+    }
 
-    return {
-      nearVol,
-      nearWire,
-      validVol,
-      validWire,
-      farVol,
-      farWire
-    };
-  }, [mirrorPath, horizontalFov, verticalFov, dofNear, dofFar]);
+    // 4. Reflected Yellow Zone (Beyond DOF far limit)
+    const sYellowStart = Math.max(0, dofFar - dA);
+    const sYellowEnd = Math.max(sYellowStart + 0.35, maxRange - dA);
+    const hasReflYellow = sYellowEnd > sYellowStart + 0.01;
+    let reflYellowVol: THREE.BufferGeometry | null = null;
+    let reflYellowWire: THREE.BufferGeometry | null = null;
+    if (hasReflYellow) {
+      const yellowNearPts = mirrorPts.map((pt, k) => pt.clone().addScaledVector(rayDirs[k], sYellowStart));
+      const yellowFarPts = mirrorPts.map((pt, k) => pt.clone().addScaledVector(rayDirs[k], sYellowEnd));
+      reflYellowVol = createPolyhedronGeometry(yellowNearPts, yellowFarPts);
+      reflYellowWire = createPolyhedronWireframeGeometry(yellowNearPts, yellowFarPts);
+    }
 
-  // Secondary Reflected Frustum Geometries (Clamped to Mirror Aperture)
-  const reflectedGeometries = useMemo(() => {
-    if (!mirrorPath) return null;
-    const dA = mirrorPath.distanceA;
-    const wBase = mirrorPath.clampedBaseWidth;
-    const hBase = mirrorPath.clampedBaseHeight;
-
-    // 1. Reflected Red Zone: Distance A + s < dofNear => s < dofNear - dA
-    const hasRed = dA < dofNear;
-    const redEnd = Math.max(0, dofNear - dA);
-    const nearVol = hasRed ? createReflectedFrustumSegmentGeometry(0, redEnd, dA, wBase, hBase) : null;
-    const nearWire = hasRed ? createReflectedFrustumWireframeGeometry(0, redEnd, dA, wBase, hBase) : null;
-
-    // 2. Reflected Green Zone: dofNear <= Distance A + s <= dofFar
-    const greenStart = Math.max(0, dofNear - dA);
-    const greenEnd = Math.max(0, dofFar - dA);
-    const hasGreen = greenEnd > greenStart;
-    const validVol = hasGreen ? createReflectedFrustumSegmentGeometry(greenStart, greenEnd, dA, wBase, hBase) : null;
-    const validWire = hasGreen ? createReflectedFrustumWireframeGeometry(greenStart, greenEnd, dA, wBase, hBase) : null;
-
-    // 3. Reflected Yellow Zone: Distance A + s > dofFar
-    const yellowStart = Math.max(0, dofFar - dA);
-    const yellowEnd = Math.max(yellowStart + 0.3, maxRange - dA);
-    const hasYellow = yellowEnd > yellowStart;
-    const farVol = hasYellow ? createReflectedFrustumSegmentGeometry(yellowStart, yellowEnd, dA, wBase, hBase) : null;
-    const farWire = hasYellow ? createReflectedFrustumWireframeGeometry(yellowStart, yellowEnd, dA, wBase, hBase) : null;
+    // Optical sightline points in world coordinates
+    const sightlinePts = [
+      mirrorPath.scannerLensPos,
+      mirrorPath.mirrorPos,
+      mirrorPath.mirrorPos,
+      mirrorPath.mirrorPos.clone().addScaledVector(mirrorPath.reflectedVector, sYellowEnd)
+    ];
+    const sightlineGeom = new THREE.BufferGeometry().setFromPoints(sightlinePts);
 
     return {
-      nearVol,
-      nearWire,
-      validVol,
-      validWire,
-      farVol,
-      farWire,
-      maxReflectedDist: yellowEnd
+      isPrimaryBlind,
+      primaryVol,
+      primaryWire,
+      reflRedVol,
+      reflRedWire,
+      reflGreenVol,
+      reflGreenWire,
+      reflYellowVol,
+      reflYellowWire,
+      sightlineGeom
     };
   }, [mirrorPath, dofNear, dofFar, maxRange]);
 
@@ -166,7 +167,7 @@ export const ScannerFrustum: React.FC<ScannerFrustumProps> = ({ scanner }) => {
   return (
     <>
       {/* =========================================================================
-          SCANNER BODY & PRIMARY BEAM (LOCAL COORD FRAME)
+          PHYSICAL INDUSTRIAL SCANNER HOUSING (LOCAL FRAME)
          ========================================================================= */}
       <group
         ref={groupRef}
@@ -177,7 +178,6 @@ export const ScannerFrustum: React.FC<ScannerFrustumProps> = ({ scanner }) => {
           setSelectedScannerId(scanner.id);
         }}
       >
-        {/* Physical Industrial Scanner Enclosure */}
         <group position={[0, 0, 0]}>
           <mesh castShadow position={[0, 0, 0.08]}>
             <boxGeometry args={[0.08, 0.08, 0.16]} />
@@ -223,22 +223,19 @@ export const ScannerFrustum: React.FC<ScannerFrustumProps> = ({ scanner }) => {
             <meshStandardMaterial color="#475569" metalness={0.7} roughness={0.3} />
           </mesh>
 
-          {/* Optical Sightline Center Axis Ray */}
-          {viewSettings.showOpticalRays && (
+          {/* Direct Line-of-sight Sightline Ray (Only when no mirror active) */}
+          {!mirrorPath && viewSettings.showOpticalRays && (
             <lineSegments>
               <bufferGeometry>
                 <bufferAttribute
                   attach="attributes-position"
                   count={2}
-                  array={new Float32Array([
-                    0, 0, 0,
-                    0, 0, -(mirrorPath ? mirrorPath.distanceA : dofFar)
-                  ])}
+                  array={new Float32Array([0, 0, 0, 0, 0, -dofFar])}
                   itemSize={3}
                 />
               </bufferGeometry>
               <lineDashedMaterial
-                color={isActivelyReading ? '#10b981' : mirrorPath ? '#38bdf8' : '#64748b'}
+                color={isActivelyReading ? '#10b981' : '#64748b'}
                 dashSize={0.05}
                 gapSize={0.03}
                 transparent
@@ -248,168 +245,84 @@ export const ScannerFrustum: React.FC<ScannerFrustumProps> = ({ scanner }) => {
           )}
         </group>
 
-        {/* --- Primary Frustum Volume / Wireframe --- */}
-        {viewSettings.showFrustums && (
+        {/* Direct Line-of-sight Frustums (Only when no mirror active) */}
+        {!mirrorPath && viewSettings.showFrustums && (
           <group>
-            {/* If Mirror Enabled: Render primary beam up to mirror */}
-            {mirrorPath && primaryGeometries ? (
+            {/* Zone 1: Blind Spot (Red) */}
+            {viewSettings.showDofZones && directNearVolGeom && (
               <group>
-                {/* Primary Red Zone */}
-                {viewSettings.showDofZones && primaryGeometries.nearVol && (
-                  <group>
-                    {!viewSettings.showWireframe && (
-                      <mesh geometry={primaryGeometries.nearVol}>
-                        <meshBasicMaterial
-                          color="#ef4444"
-                          transparent
-                          opacity={Math.min(1.0, 0.25 * dofFactor * scaleFactor)}
-                          depthWrite={false}
-                          side={THREE.DoubleSide}
-                        />
-                      </mesh>
-                    )}
-                    {primaryGeometries.nearWire && (
-                      <lineSegments geometry={primaryGeometries.nearWire}>
-                        <lineBasicMaterial
-                          color="#ef4444"
-                          transparent
-                          opacity={Math.min(1.0, 0.5 * coneFactor + 0.2)}
-                        />
-                      </lineSegments>
-                    )}
-                  </group>
+                {!viewSettings.showWireframe && (
+                  <mesh geometry={directNearVolGeom}>
+                    <meshBasicMaterial
+                      color="#ef4444"
+                      transparent
+                      opacity={Math.min(1.0, 0.25 * dofFactor * scaleFactor)}
+                      depthWrite={false}
+                      side={THREE.DoubleSide}
+                    />
+                  </mesh>
                 )}
-
-                {/* Primary Green Zone */}
-                {primaryGeometries.validVol && (
-                  <group>
-                    {!viewSettings.showWireframe && (
-                      <mesh geometry={primaryGeometries.validVol}>
-                        <meshBasicMaterial
-                          color={isActivelyReading ? '#10b981' : (viewSettings.showDofZones ? '#22c55e' : scanner.color)}
-                          transparent
-                          opacity={Math.min(1.0, (isActivelyReading ? 0.8 : isSelected ? 0.55 : 0.4) * dofFactor * scaleFactor)}
-                          depthWrite={false}
-                          side={THREE.DoubleSide}
-                        />
-                      </mesh>
-                    )}
-                    {primaryGeometries.validWire && (
-                      <lineSegments geometry={primaryGeometries.validWire}>
-                        <lineBasicMaterial
-                          color={isActivelyReading ? '#34d399' : (viewSettings.showDofZones ? '#10b981' : scanner.color)}
-                          transparent
-                          opacity={Math.min(1.0, (isActivelyReading ? 0.98 : 0.75) * scaleFactor)}
-                          linewidth={isSelected ? 2 : 1}
-                        />
-                      </lineSegments>
-                    )}
-                  </group>
-                )}
-
-                {/* Primary Yellow Zone */}
-                {viewSettings.showDofZones && primaryGeometries.farVol && (
-                  <group>
-                    {!viewSettings.showWireframe && (
-                      <mesh geometry={primaryGeometries.farVol}>
-                        <meshBasicMaterial
-                          color="#eab308"
-                          transparent
-                          opacity={Math.min(1.0, 0.18 * dofFactor * scaleFactor)}
-                          depthWrite={false}
-                          side={THREE.DoubleSide}
-                        />
-                      </mesh>
-                    )}
-                    {primaryGeometries.farWire && (
-                      <lineSegments geometry={primaryGeometries.farWire}>
-                        <lineBasicMaterial
-                          color="#ca8a04"
-                          transparent
-                          opacity={Math.min(1.0, 0.45 * coneFactor + 0.15)}
-                        />
-                      </lineSegments>
-                    )}
-                  </group>
+                {directNearWireGeom && (
+                  <lineSegments geometry={directNearWireGeom}>
+                    <lineBasicMaterial
+                      color="#ef4444"
+                      transparent
+                      opacity={Math.min(1.0, 0.5 * coneFactor + 0.2)}
+                    />
+                  </lineSegments>
                 )}
               </group>
-            ) : (
-              /* Direct Scanning Frustum (No mirror) */
+            )}
+
+            {/* Zone 2: Valid DOF Reading Zone (Green) */}
+            {directValidVolGeom && (
               <group>
-                {viewSettings.showDofZones && directNearVolGeom && (
-                  <group>
-                    {!viewSettings.showWireframe && (
-                      <mesh geometry={directNearVolGeom}>
-                        <meshBasicMaterial
-                          color="#ef4444"
-                          transparent
-                          opacity={Math.min(1.0, 0.25 * dofFactor * scaleFactor)}
-                          depthWrite={false}
-                          side={THREE.DoubleSide}
-                        />
-                      </mesh>
-                    )}
-                    {directNearWireGeom && (
-                      <lineSegments geometry={directNearWireGeom}>
-                        <lineBasicMaterial
-                          color="#ef4444"
-                          transparent
-                          opacity={Math.min(1.0, 0.5 * coneFactor + 0.2)}
-                        />
-                      </lineSegments>
-                    )}
-                  </group>
+                {!viewSettings.showWireframe && (
+                  <mesh geometry={directValidVolGeom}>
+                    <meshBasicMaterial
+                      color={isActivelyReading ? '#10b981' : (viewSettings.showDofZones ? '#22c55e' : scanner.color)}
+                      transparent
+                      opacity={Math.min(1.0, (isActivelyReading ? 0.8 : isSelected ? 0.55 : 0.4) * dofFactor * scaleFactor)}
+                      depthWrite={false}
+                      side={THREE.DoubleSide}
+                    />
+                  </mesh>
                 )}
-
-                {directValidVolGeom && (
-                  <group>
-                    {!viewSettings.showWireframe && (
-                      <mesh geometry={directValidVolGeom}>
-                        <meshBasicMaterial
-                          color={isActivelyReading ? '#10b981' : (viewSettings.showDofZones ? '#22c55e' : scanner.color)}
-                          transparent
-                          opacity={Math.min(1.0, (isActivelyReading ? 0.8 : isSelected ? 0.55 : 0.4) * dofFactor * scaleFactor)}
-                          depthWrite={false}
-                          side={THREE.DoubleSide}
-                        />
-                      </mesh>
-                    )}
-                    {directValidWireGeom && (
-                      <lineSegments geometry={directValidWireGeom}>
-                        <lineBasicMaterial
-                          color={isActivelyReading ? '#34d399' : (viewSettings.showDofZones ? '#10b981' : scanner.color)}
-                          transparent
-                          opacity={Math.min(1.0, (isActivelyReading ? 0.98 : 0.75) * scaleFactor)}
-                          linewidth={isSelected ? 2 : 1}
-                        />
-                      </lineSegments>
-                    )}
-                  </group>
+                {directValidWireGeom && (
+                  <lineSegments geometry={directValidWireGeom}>
+                    <lineBasicMaterial
+                      color={isActivelyReading ? '#34d399' : (viewSettings.showDofZones ? '#10b981' : scanner.color)}
+                      transparent
+                      opacity={Math.min(1.0, (isActivelyReading ? 0.98 : 0.75) * scaleFactor)}
+                      linewidth={isSelected ? 2 : 1}
+                    />
+                  </lineSegments>
                 )}
+              </group>
+            )}
 
-                {viewSettings.showDofZones && directFarVolGeom && (
-                  <group>
-                    {!viewSettings.showWireframe && (
-                      <mesh geometry={directFarVolGeom}>
-                        <meshBasicMaterial
-                          color="#eab308"
-                          transparent
-                          opacity={Math.min(1.0, 0.18 * dofFactor * scaleFactor)}
-                          depthWrite={false}
-                          side={THREE.DoubleSide}
-                        />
-                      </mesh>
-                    )}
-                    {directFarWireGeom && (
-                      <lineSegments geometry={directFarWireGeom}>
-                        <lineBasicMaterial
-                          color="#ca8a04"
-                          transparent
-                          opacity={Math.min(1.0, 0.45 * coneFactor + 0.15)}
-                        />
-                      </lineSegments>
-                    )}
-                  </group>
+            {/* Zone 3: Out of Focus (Yellow) */}
+            {viewSettings.showDofZones && directFarVolGeom && (
+              <group>
+                {!viewSettings.showWireframe && (
+                  <mesh geometry={directFarVolGeom}>
+                    <meshBasicMaterial
+                      color="#eab308"
+                      transparent
+                      opacity={Math.min(1.0, 0.18 * dofFactor * scaleFactor)}
+                      depthWrite={false}
+                      side={THREE.DoubleSide}
+                    />
+                  </mesh>
+                )}
+                {directFarWireGeom && (
+                  <lineSegments geometry={directFarWireGeom}>
+                    <lineBasicMaterial
+                      color="#ca8a04"
+                      transparent
+                      opacity={Math.min(1.0, 0.45 * coneFactor + 0.15)}
+                    />
+                  </lineSegments>
                 )}
               </group>
             )}
@@ -418,104 +331,66 @@ export const ScannerFrustum: React.FC<ScannerFrustumProps> = ({ scanner }) => {
       </group>
 
       {/* =========================================================================
-          OPTICAL DEFLECTION MIRROR & SECONDARY REFLECTED FRUSTUM
+          FOLDED OPTICAL MIRROR REFLECTION & SEAMLESS CONES (WORLD SPACE)
          ========================================================================= */}
-      {mirrorPath && (
-        <group>
-          {/* Mirror Physical Assembly (Metallic Reflective Surface + Frame + Mount) */}
-          <group
-            position={[mirrorPath.mirrorPos.x, mirrorPath.mirrorPos.y, mirrorPath.mirrorPos.z]}
-            rotation={mirrorPath.mirrorRotationEuler}
-            onClick={(e) => {
-              e.stopPropagation();
-              setSelectedScannerId(scanner.id);
-            }}
-          >
-            {/* Front Surface Reflective Metallic Plane */}
-            <mesh>
-              <planeGeometry args={[mirrorPath.mirrorWidth, mirrorPath.mirrorHeight]} />
-              <meshStandardMaterial
-                color="#e2e8f0"
-                metalness={0.96}
-                roughness={0.06}
-                envMapIntensity={1.8}
-                side={THREE.DoubleSide}
-              />
-            </mesh>
-
-            {/* Mirror Frame / Backing Plate */}
-            <mesh position={[0, 0, -0.004]}>
-              <boxGeometry args={[mirrorPath.mirrorWidth + 0.014, mirrorPath.mirrorHeight + 0.014, 0.008]} />
-              <meshStandardMaterial
-                color={isSelected ? '#0369a1' : '#1e293b'}
-                metalness={0.8}
-                roughness={0.3}
-              />
-            </mesh>
-
-            {/* Mirror Swivel Mount Pivot Socket */}
-            <mesh position={[0, 0, -0.015]}>
-              <boxGeometry args={[0.035, 0.035, 0.018]} />
-              <meshStandardMaterial color="#475569" metalness={0.7} roughness={0.3} />
-            </mesh>
-
-            {/* Mirror Mounting Arm / Bracket */}
-            <mesh position={[0, mirrorPath.mirrorHeight / 2 + 0.015, -0.015]} rotation={[0, 0, 0]}>
-              <cylinderGeometry args={[0.006, 0.006, 0.03, 16]} />
-              <meshStandardMaterial color="#64748b" metalness={0.7} roughness={0.3} />
-            </mesh>
-
-            {/* Aperture Boundary Outline (Orange Warning when clipped, Cyan when 100% OK) */}
-            <lineSegments>
-              <edgesGeometry args={[new THREE.PlaneGeometry(mirrorPath.mirrorWidth, mirrorPath.mirrorHeight)]} />
-              <lineBasicMaterial
-                color={mirrorPath.isApertureClipped ? '#f59e0b' : '#38bdf8'}
-                linewidth={mirrorPath.isApertureClipped ? 3 : 1}
-                opacity={mirrorPath.isApertureClipped ? 1.0 : 0.6}
+      {mirrorPath && foldedGeometries && (
+        <group
+          onClick={(e) => {
+            e.stopPropagation();
+            setSelectedScannerId(scanner.id);
+          }}
+        >
+          {/* Continuous Folded Optical Sightline Rays (Lens -> Mirror -> Conveyor) */}
+          {viewSettings.showOpticalRays && (
+            <lineSegments geometry={foldedGeometries.sightlineGeom}>
+              <lineDashedMaterial
+                color={isActivelyReading ? '#10b981' : '#38bdf8'}
+                dashSize={0.06}
+                gapSize={0.03}
                 transparent
+                opacity={0.85}
               />
             </lineSegments>
-          </group>
+          )}
 
-          {/* Secondary Reflected Frustum Cone (Color-coded by combined Distance A + B) */}
-          {viewSettings.showFrustums && reflectedGeometries && (
-            <group
-              position={[mirrorPath.mirrorPos.x, mirrorPath.mirrorPos.y, mirrorPath.mirrorPos.z]}
-              rotation={mirrorPath.reflectedRotation}
-              onClick={(e) => {
-                e.stopPropagation();
-                setSelectedScannerId(scanner.id);
-              }}
-            >
-              {/* Reflected Sightline Center Axis Ray */}
-              {viewSettings.showOpticalRays && (
-                <lineSegments>
-                  <bufferGeometry>
-                    <bufferAttribute
-                      attach="attributes-position"
-                      count={2}
-                      array={new Float32Array([
-                        0, 0, 0,
-                        0, 0, -reflectedGeometries.maxReflectedDist
-                      ])}
-                      itemSize={3}
+          {/* Frustum Cones */}
+          {viewSettings.showFrustums && (
+            <group>
+              {/* --- 1. PRIMARY BEAM: From Lens to Mirror Face (Flush Termination) --- */}
+              <group>
+                {!viewSettings.showWireframe && (
+                  <mesh geometry={foldedGeometries.primaryVol}>
+                    <meshBasicMaterial
+                      color={
+                        foldedGeometries.isPrimaryBlind
+                          ? '#ef4444' // Red if within blind spot
+                          : (isActivelyReading ? '#10b981' : (viewSettings.showDofZones ? '#22c55e' : scanner.color))
+                      }
+                      transparent
+                      opacity={Math.min(
+                        1.0,
+                        (foldedGeometries.isPrimaryBlind ? 0.22 : 0.38) * dofFactor * scaleFactor
+                      )}
+                      depthWrite={false}
+                      side={THREE.DoubleSide}
                     />
-                  </bufferGeometry>
-                  <lineDashedMaterial
-                    color={isActivelyReading ? '#10b981' : '#38bdf8'}
-                    dashSize={0.05}
-                    gapSize={0.03}
+                  </mesh>
+                )}
+                <lineSegments geometry={foldedGeometries.primaryWire}>
+                  <lineBasicMaterial
+                    color={foldedGeometries.isPrimaryBlind ? '#ef4444' : '#38bdf8'}
                     transparent
-                    opacity={0.8}
+                    opacity={Math.min(1.0, 0.7 * scaleFactor)}
+                    linewidth={1}
                   />
                 </lineSegments>
-              )}
+              </group>
 
-              {/* Reflected Zone 1: Blind Spot / Too Close (RED) */}
-              {viewSettings.showDofZones && reflectedGeometries.nearVol && (
+              {/* --- 2. REFLECTED RED ZONE (Blind Spot Before Focus): Distance A + s < dofNear --- */}
+              {viewSettings.showDofZones && foldedGeometries.reflRedVol && (
                 <group>
                   {!viewSettings.showWireframe && (
-                    <mesh geometry={reflectedGeometries.nearVol}>
+                    <mesh geometry={foldedGeometries.reflRedVol}>
                       <meshBasicMaterial
                         color="#ef4444"
                         transparent
@@ -525,8 +400,8 @@ export const ScannerFrustum: React.FC<ScannerFrustumProps> = ({ scanner }) => {
                       />
                     </mesh>
                   )}
-                  {reflectedGeometries.nearWire && (
-                    <lineSegments geometry={reflectedGeometries.nearWire}>
+                  {foldedGeometries.reflRedWire && (
+                    <lineSegments geometry={foldedGeometries.reflRedWire}>
                       <lineBasicMaterial
                         color="#ef4444"
                         transparent
@@ -537,22 +412,25 @@ export const ScannerFrustum: React.FC<ScannerFrustumProps> = ({ scanner }) => {
                 </group>
               )}
 
-              {/* Reflected Zone 2: Valid DOF Reading Zone (GREEN) */}
-              {reflectedGeometries.validVol && (
+              {/* --- 3. REFLECTED GREEN ZONE (Valid DOF Reading Range): Seamless from Mirror Surface --- */}
+              {foldedGeometries.reflGreenVol && (
                 <group>
                   {!viewSettings.showWireframe && (
-                    <mesh geometry={reflectedGeometries.validVol}>
+                    <mesh geometry={foldedGeometries.reflGreenVol}>
                       <meshBasicMaterial
                         color={isActivelyReading ? '#10b981' : (viewSettings.showDofZones ? '#22c55e' : scanner.color)}
                         transparent
-                        opacity={Math.min(1.0, (isActivelyReading ? 0.8 : isSelected ? 0.55 : 0.4) * dofFactor * scaleFactor)}
+                        opacity={Math.min(
+                          1.0,
+                          (isActivelyReading ? 0.8 : isSelected ? 0.55 : 0.4) * dofFactor * scaleFactor
+                        )}
                         depthWrite={false}
                         side={THREE.DoubleSide}
                       />
                     </mesh>
                   )}
-                  {reflectedGeometries.validWire && (
-                    <lineSegments geometry={reflectedGeometries.validWire}>
+                  {foldedGeometries.reflGreenWire && (
+                    <lineSegments geometry={foldedGeometries.reflGreenWire}>
                       <lineBasicMaterial
                         color={isActivelyReading ? '#34d399' : (viewSettings.showDofZones ? '#10b981' : scanner.color)}
                         transparent
@@ -564,11 +442,11 @@ export const ScannerFrustum: React.FC<ScannerFrustumProps> = ({ scanner }) => {
                 </group>
               )}
 
-              {/* Reflected Zone 3: Beyond DOF Far Limit / Out of Focus (YELLOW) */}
-              {viewSettings.showDofZones && reflectedGeometries.farVol && (
+              {/* --- 4. REFLECTED YELLOW ZONE (Beyond DOF Far Limit) --- */}
+              {viewSettings.showDofZones && foldedGeometries.reflYellowVol && (
                 <group>
                   {!viewSettings.showWireframe && (
-                    <mesh geometry={reflectedGeometries.farVol}>
+                    <mesh geometry={foldedGeometries.reflYellowVol}>
                       <meshBasicMaterial
                         color="#eab308"
                         transparent
@@ -578,8 +456,8 @@ export const ScannerFrustum: React.FC<ScannerFrustumProps> = ({ scanner }) => {
                       />
                     </mesh>
                   )}
-                  {reflectedGeometries.farWire && (
-                    <lineSegments geometry={reflectedGeometries.farWire}>
+                  {foldedGeometries.reflYellowWire && (
+                    <lineSegments geometry={foldedGeometries.reflYellowWire}>
                       <lineBasicMaterial
                         color="#ca8a04"
                         transparent
@@ -591,6 +469,57 @@ export const ScannerFrustum: React.FC<ScannerFrustumProps> = ({ scanner }) => {
               )}
             </group>
           )}
+
+          {/* Physical Mirror Mesh Assembly positioned at Mirror World Position */}
+          <group
+            position={[mirrorPath.mirrorPos.x, mirrorPath.mirrorPos.y, mirrorPath.mirrorPos.z]}
+            rotation={mirrorPath.mirrorRotationEuler}
+          >
+            {/* Front Surface Reflective Metallic Glass Plane */}
+            <mesh>
+              <planeGeometry args={[mirrorPath.mirrorWidth, mirrorPath.mirrorHeight]} />
+              <meshStandardMaterial
+                color="#e2e8f0"
+                metalness={0.97}
+                roughness={0.05}
+                envMapIntensity={2.0}
+                side={THREE.DoubleSide}
+              />
+            </mesh>
+
+            {/* Aluminum Mirror Enclosure & Backing Plate */}
+            <mesh position={[0, 0, -0.004]}>
+              <boxGeometry args={[mirrorPath.mirrorWidth + 0.012, mirrorPath.mirrorHeight + 0.012, 0.008]} />
+              <meshStandardMaterial
+                color={isSelected ? '#0369a1' : '#1e293b'}
+                metalness={0.8}
+                roughness={0.3}
+              />
+            </mesh>
+
+            {/* Rear Swivel Mount Pivot Socket */}
+            <mesh position={[0, 0, -0.015]}>
+              <boxGeometry args={[0.035, 0.035, 0.018]} />
+              <meshStandardMaterial color="#475569" metalness={0.7} roughness={0.3} />
+            </mesh>
+
+            {/* Mount Rod / Bracket */}
+            <mesh position={[0, mirrorPath.mirrorHeight / 2 + 0.015, -0.015]} rotation={[0, 0, 0]}>
+              <cylinderGeometry args={[0.006, 0.006, 0.03, 16]} />
+              <meshStandardMaterial color="#64748b" metalness={0.7} roughness={0.3} />
+            </mesh>
+
+            {/* Aperture Outline (Orange Warning when clipped, Cyan when 100% OK) */}
+            <lineSegments>
+              <edgesGeometry args={[new THREE.PlaneGeometry(mirrorPath.mirrorWidth, mirrorPath.mirrorHeight)]} />
+              <lineBasicMaterial
+                color={mirrorPath.isApertureClipped ? '#f59e0b' : '#38bdf8'}
+                linewidth={mirrorPath.isApertureClipped ? 3 : 1}
+                opacity={mirrorPath.isApertureClipped ? 1.0 : 0.65}
+                transparent
+              />
+            </lineSegments>
+          </group>
         </group>
       )}
     </>

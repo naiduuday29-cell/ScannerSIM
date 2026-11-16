@@ -16,7 +16,7 @@ import { TrajectoryTrail } from './TrajectoryTrail';
 const CameraSyncController: React.FC = () => {
   const { camera } = useThree();
   const controlsRef = useRef<OrbitControlsImpl>(null);
-  const { cameraSnap, conveyor } = useSimulator();
+  const { cameraSnap, conveyor, isPanModeActive } = useSimulator();
 
   // Animation target state for lerping
   const animRef = useRef<{
@@ -70,9 +70,21 @@ const CameraSyncController: React.FC = () => {
       makeDefault
       enableDamping
       dampingFactor={0.06}
-      minDistance={0.8}
-      maxDistance={24.0}
+      enablePan={true}
+      screenSpacePanning={true}
+      panSpeed={1.2}
+      minDistance={0.5}
+      maxDistance={35.0}
       target={[0, conveyor.height * 0.9, 0]}
+      mouseButtons={{
+        LEFT: isPanModeActive ? THREE.MOUSE.PAN : THREE.MOUSE.ROTATE,
+        MIDDLE: THREE.MOUSE.DOLLY,
+        RIGHT: THREE.MOUSE.PAN
+      }}
+      touches={{
+        ONE: isPanModeActive ? THREE.TOUCH.PAN : THREE.TOUCH.ROTATE,
+        TWO: THREE.TOUCH.DOLLY_PAN
+      }}
     />
   );
 };

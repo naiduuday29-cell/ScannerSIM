@@ -75,8 +75,11 @@ interface SimulatorContextType {
   viewSettings: ViewSettings;
   updateViewSettings: (updates: Partial<ViewSettings>) => void;
   cameraSnap: { position: [number, number, number]; target: [number, number, number]; name: string; key: number } | null;
-  snapCameraTo: (view: 'TOP' | 'BOTTOM' | 'FRONT' | 'BACK' | 'LEFT' | 'RIGHT' | 'ISOMETRIC' | 'TUNNEL') => void;
+  snapCameraTo: (view: 'TOP' | 'BOTTOM' | 'FRONT' | 'BACK' | 'LEFT' | 'RIGHT' | 'ISOMETRIC' | 'TUNNEL' | 'BIRDS_EYE') => void;
   snapCameraToAngles: (pitchDeg: number, yawDeg: number, distance?: number) => void;
+  isPanModeActive: boolean;
+  setIsPanModeActive: (active: boolean) => void;
+  togglePanMode: () => void;
 
   // Export / Import
   exportConfiguration: () => void;
@@ -220,6 +223,10 @@ export const SimulatorProvider: React.FC<{ children: ReactNode }> = ({ children 
   });
 
   const [viewSettings, setViewSettings] = useState<ViewSettings>(DEFAULT_VIEW_SETTINGS);
+  const [isPanModeActive, setIsPanModeActive] = useState(false);
+  const togglePanMode = useCallback(() => {
+    setIsPanModeActive(prev => !prev);
+  }, []);
   const [cameraSnap, setCameraSnap] = useState<{
     position: [number, number, number];
     target: [number, number, number];
@@ -560,7 +567,7 @@ export const SimulatorProvider: React.FC<{ children: ReactNode }> = ({ children 
     setViewSettings(prev => ({ ...prev, ...updates }));
   }, []);
 
-  const snapCameraTo = useCallback((view: 'TOP' | 'BOTTOM' | 'FRONT' | 'BACK' | 'LEFT' | 'RIGHT' | 'ISOMETRIC' | 'TUNNEL') => {
+  const snapCameraTo = useCallback((view: 'TOP' | 'BOTTOM' | 'FRONT' | 'BACK' | 'LEFT' | 'RIGHT' | 'ISOMETRIC' | 'TUNNEL' | 'BIRDS_EYE') => {
     const centerY = conveyor.height;
     const dist = Math.max(3.5, conveyor.length * 0.9);
 
@@ -589,6 +596,10 @@ export const SimulatorProvider: React.FC<{ children: ReactNode }> = ({ children 
       case 'TUNNEL':
         pos = [-conveyor.length * 0.6, centerY + 0.35, 0];
         target = [0, centerY + 0.25, 0];
+        break;
+      case 'BIRDS_EYE':
+        pos = [dist * 0.65, centerY + dist * 0.95, dist * 0.75];
+        target = [0, centerY, 0];
         break;
       case 'ISOMETRIC':
       default:
@@ -904,6 +915,9 @@ export const SimulatorProvider: React.FC<{ children: ReactNode }> = ({ children 
         cameraSnap,
         snapCameraTo,
         snapCameraToAngles,
+        isPanModeActive,
+        setIsPanModeActive,
+        togglePanMode,
         exportConfiguration,
         importConfiguration,
         scannerLibrary,
