@@ -46,21 +46,103 @@ export const TwoPointFovCalculator: React.FC<TwoPointFovCalculatorProps> = ({
   const [w2, setW2] = useState<number>(toDisplayLength(initW2, dimUnit));
   const [h2, setH2] = useState<number>(toDisplayLength(initH2, dimUnit));
 
-  // When dimUnit changes, re-scale display values
+  // Keep D1 and D2 local display inputs synchronized when scanner.optical.dofNear / dofFar
+  // or twoPointCalibration change externally (e.g. from the DOF sliders in ScannerDeploymentCard)
   useEffect(() => {
-    setD1(toDisplayLength(initD1, dimUnit));
-    setW1(toDisplayLength(initW1, dimUnit));
-    setH1(toDisplayLength(initH1, dimUnit));
-    setD2(toDisplayLength(initD2, dimUnit));
-    setW2(toDisplayLength(initW2, dimUnit));
-    setH2(toDisplayLength(initH2, dimUnit));
+    const curNearM = scanner.optical.dofNear;
+    const curFarM = scanner.optical.dofFar;
+    const cal = scanner.optical.twoPointCalibration;
+
+    const targetD1M = cal?.d1 ?? curNearM;
+    const targetD2M = cal?.d2 ?? curFarM;
+
+    setD1(prev => {
+      const currentM = fromDisplayLength(Number(prev) || 0, dimUnit);
+      if (Math.abs(currentM - targetD1M) > 0.001) {
+        return toDisplayLength(targetD1M, dimUnit);
+      }
+      return prev;
+    });
+
+    setD2(prev => {
+      const currentM = fromDisplayLength(Number(prev) || 0, dimUnit);
+      if (Math.abs(currentM - targetD2M) > 0.001) {
+        return toDisplayLength(targetD2M, dimUnit);
+      }
+      return prev;
+    });
+  }, [scanner.optical.dofNear, scanner.optical.dofFar, scanner.optical.twoPointCalibration, dimUnit]);
+
+  // When dimUnit changes, re-scale display values from SI meters
+  useEffect(() => {
+    const cal = scanner.optical.twoPointCalibration;
+    const curD1M = cal?.d1 ?? (scanner.optical.dofNear || 0.6);
+    const curD2M = cal?.d2 ?? (scanner.optical.dofFar || 1.8);
+    const hR = THREE.MathUtils.degToRad(scanner.optical.horizontalFov);
+    const vR = THREE.MathUtils.degToRad(scanner.optical.verticalFov);
+
+    const curW1M = cal?.w1 ?? (2 * curD1M * Math.tan(hR / 2));
+    const curH1M = cal?.h1 ?? (2 * curD1M * Math.tan(vR / 2));
+    const curW2M = cal?.w2 ?? (2 * curD2M * Math.tan(hR / 2));
+    const curH2M = cal?.h2 ?? (2 * curD2M * Math.tan(vR / 2));
+
+    setD1(toDisplayLength(curD1M, dimUnit));
+    setW1(toDisplayLength(curW1M, dimUnit));
+    setH1(toDisplayLength(curH1M, dimUnit));
+    setD2(toDisplayLength(curD2M, dimUnit));
+    setW2(toDisplayLength(curW2M, dimUnit));
+    setH2(toDisplayLength(curH2M, dimUnit));
   }, [dimUnit]);
 
-  // Convert inputs to meters (SI base) for mathematical calculation
+  // Handle direct user edits to any of the 6 fields and apply only on actual user change
+  const handleFieldChange = (field: 'd1' | 'w1' | 'h1' | 'd2' | 'w2' | 'h2', rawVal: number) => {
+    const val = isNaN(rawVal) ? 0 : rawVal;
+    const nextD1 = field === 'd1' ? val : d1;
+    const nextW1 = field === 'w1' ? val : w1;
+    const nextH1 = field === 'h1' ? val : h1;
+    const nextD2 = field === 'd2' ? val : d2;
+    const nextW2 = field === 'w2' ? val : w2;
+    const nextH2 = field === 'h2' ? val : h2;
+
+    if (field === 'd1') setD1(val);
+    else if (field === 'w1') setW1(val);
+    else if (field === 'h1') setH1(val);
+    else if (field === 'd2') setD2(val);
+    else if (field === 'w2') setW2(val);
+    else if (field === 'h2') setH2(val);
+
+    const nextD1M = fromDisplayLength(Number(nextD1) || 0, dimUnit);
+    const nextW1M = fromDisplayLength(Number(nextW1) || 0, dimUnit);
+    const nextH1M = fromDisplayLength(Number(nextH1) || 0, dimUnit);
+    const nextD2M = fromDisplayLength(Number(nextD2) || 0, dimUnit);
+    const nextW2M = fromDisplayLength(Number(nextW2) || 0, dimUnit);
+    const nextH2M = fromDisplayLength(Number(nextH2) || 0, dimUnit);
+
+    const res = calculateFovFromTwoDistancePoints(nextD1M, nextW1M, nextH1M, nextD2M, nextW2M, nextH2M);
+    if (res.isValid) {
+      onApply({
+        horizontalFov: res.horizontalFovDeg,
+        verticalFov: res.verticalFovDeg,
+        dofNear: nextD1M > 0 ? nextD1M : scanner.optical.dofNear,
+        dofFar: nextD2M > 0 ? nextD2M : scanner.optical.dofFar,
+        calibrationData: {
+          enabled: true,
+          d1: nextD1M > 0 ? nextD1M : scanner.optical.dofNear,
+          w1: nextW1M,
+          h1: nextH1M,
+          d2: nextD2M > 0 ? nextD2M : scanner.optical.dofFar,
+          w2: nextW2M,
+          h2: nextH2M,
+          syncDof: true
+        }
+      });
+    }
+  };
+
+  // Convert inputs to meters for display readout
   const d1Meters = fromDisplayLength(Number(d1) || 0, dimUnit);
   const w1Meters = fromDisplayLength(Number(w1) || 0, dimUnit);
   const h1Meters = fromDisplayLength(Number(h1) || 0, dimUnit);
-
   const d2Meters = fromDisplayLength(Number(d2) || 0, dimUnit);
   const w2Meters = fromDisplayLength(Number(w2) || 0, dimUnit);
   const h2Meters = fromDisplayLength(Number(h2) || 0, dimUnit);
@@ -73,42 +155,6 @@ export const TwoPointFovCalculator: React.FC<TwoPointFovCalculatorProps> = ({
     w2Meters,
     h2Meters
   );
-
-  // Automatically apply calculated FOV & DOF in real-time as user types/adjusts inputs
-  useEffect(() => {
-    if (!calcResult.isValid) return;
-
-    const currentH = scanner.optical.horizontalFov;
-    const currentV = scanner.optical.verticalFov;
-    const currentNear = scanner.optical.dofNear;
-    const currentFar = scanner.optical.dofFar;
-
-    const anglesChanged =
-      Math.abs(currentH - calcResult.horizontalFovDeg) > 0.05 ||
-      Math.abs(currentV - calcResult.verticalFovDeg) > 0.05;
-
-    const dofChanged =
-      Math.abs(currentNear - d1Meters) > 0.005 || Math.abs(currentFar - d2Meters) > 0.005;
-
-    if (anglesChanged || dofChanged || !scanner.optical.twoPointCalibration?.enabled) {
-      onApply({
-        horizontalFov: calcResult.horizontalFovDeg,
-        verticalFov: calcResult.verticalFovDeg,
-        dofNear: d1Meters > 0 ? d1Meters : undefined,
-        dofFar: d2Meters > 0 ? d2Meters : undefined,
-        calibrationData: {
-          enabled: true,
-          d1: d1Meters,
-          w1: w1Meters,
-          h1: h1Meters,
-          d2: d2Meters,
-          w2: w2Meters,
-          h2: h2Meters,
-          syncDof: true
-        }
-      });
-    }
-  }, [d1, w1, h1, d2, w2, h2, dimUnit, calcResult.isValid, calcResult.horizontalFovDeg, calcResult.verticalFovDeg]);
 
   return (
     <div className={`bg-slate-950/80 rounded-xl border border-cyan-500/30 p-2.5 space-y-2.5 text-xs transition-opacity ${
@@ -134,7 +180,7 @@ export const TwoPointFovCalculator: React.FC<TwoPointFovCalculatorProps> = ({
               min="0"
               step={dimUnit === 'mm' ? 10 : 0.05}
               value={d1}
-              onChange={(e) => setD1(parseFloat(e.target.value) || 0)}
+              onChange={(e) => handleFieldChange('d1', parseFloat(e.target.value) || 0)}
               className="w-full bg-slate-950 border border-slate-700 rounded px-1.5 py-1 text-xs font-mono text-slate-100 focus:border-cyan-500 focus:outline-none"
             />
           </div>
@@ -148,7 +194,7 @@ export const TwoPointFovCalculator: React.FC<TwoPointFovCalculatorProps> = ({
               min="0"
               step={dimUnit === 'mm' ? 10 : 0.05}
               value={w1}
-              onChange={(e) => setW1(parseFloat(e.target.value) || 0)}
+              onChange={(e) => handleFieldChange('w1', parseFloat(e.target.value) || 0)}
               className="w-full bg-slate-950 border border-slate-700 rounded px-1.5 py-1 text-xs font-mono text-slate-100 focus:border-cyan-500 focus:outline-none"
             />
           </div>
@@ -162,7 +208,7 @@ export const TwoPointFovCalculator: React.FC<TwoPointFovCalculatorProps> = ({
               min="0"
               step={dimUnit === 'mm' ? 10 : 0.05}
               value={h1}
-              onChange={(e) => setH1(parseFloat(e.target.value) || 0)}
+              onChange={(e) => handleFieldChange('h1', parseFloat(e.target.value) || 0)}
               className="w-full bg-slate-950 border border-slate-700 rounded px-1.5 py-1 text-xs font-mono text-slate-100 focus:border-cyan-500 focus:outline-none"
             />
           </div>
@@ -189,7 +235,7 @@ export const TwoPointFovCalculator: React.FC<TwoPointFovCalculatorProps> = ({
               min="0"
               step={dimUnit === 'mm' ? 10 : 0.05}
               value={d2}
-              onChange={(e) => setD2(parseFloat(e.target.value) || 0)}
+              onChange={(e) => handleFieldChange('d2', parseFloat(e.target.value) || 0)}
               className="w-full bg-slate-950 border border-slate-700 rounded px-1.5 py-1 text-xs font-mono text-slate-100 focus:border-cyan-500 focus:outline-none"
             />
           </div>
@@ -203,7 +249,7 @@ export const TwoPointFovCalculator: React.FC<TwoPointFovCalculatorProps> = ({
               min="0"
               step={dimUnit === 'mm' ? 10 : 0.05}
               value={w2}
-              onChange={(e) => setW2(parseFloat(e.target.value) || 0)}
+              onChange={(e) => handleFieldChange('w2', parseFloat(e.target.value) || 0)}
               className="w-full bg-slate-950 border border-slate-700 rounded px-1.5 py-1 text-xs font-mono text-slate-100 focus:border-cyan-500 focus:outline-none"
             />
           </div>
@@ -217,12 +263,21 @@ export const TwoPointFovCalculator: React.FC<TwoPointFovCalculatorProps> = ({
               min="0"
               step={dimUnit === 'mm' ? 10 : 0.05}
               value={h2}
-              onChange={(e) => setH2(parseFloat(e.target.value) || 0)}
+              onChange={(e) => handleFieldChange('h2', parseFloat(e.target.value) || 0)}
               className="w-full bg-slate-950 border border-slate-700 rounded px-1.5 py-1 text-xs font-mono text-slate-100 focus:border-cyan-500 focus:outline-none"
             />
           </div>
         </div>
       </div>
+
+      {/* Readout */}
+      {calcResult.isValid && (
+        <div className="bg-slate-900/60 px-2 py-1.5 rounded border border-slate-800 flex items-center justify-between text-[10px] font-mono text-cyan-300">
+          <span>H-FOV: {calcResult.horizontalFovDeg.toFixed(1)}°</span>
+          <span>V-FOV: {calcResult.verticalFovDeg.toFixed(1)}°</span>
+          <span className="text-slate-400">Span: {toDisplayLength(Math.max(0, d2Meters - d1Meters), dimUnit)} {dimUnit}</span>
+        </div>
+      )}
     </div>
   );
 };

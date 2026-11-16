@@ -109,10 +109,10 @@ export const ScannerLibraryModal: React.FC = () => {
     if (preset.optical.twoPointCalibration?.enabled) {
       setFovMode('twopoint');
       const c = preset.optical.twoPointCalibration;
-      setD1(toDisplayLength(c.d1, dimUnit));
+      setD1(toDisplayLength(c.d1 ?? preset.optical.dofNear, dimUnit));
       setW1(toDisplayLength(c.w1, dimUnit));
       setH1(toDisplayLength(c.h1, dimUnit));
-      setD2(toDisplayLength(c.d2, dimUnit));
+      setD2(toDisplayLength(c.d2 ?? preset.optical.dofFar, dimUnit));
       setW2(toDisplayLength(c.w2, dimUnit));
       setH2(toDisplayLength(c.h2, dimUnit));
     } else {
@@ -132,12 +132,13 @@ export const ScannerLibraryModal: React.FC = () => {
       fovMode === 'twopoint' && calc2Point.isValid
         ? {
             enabled: true,
-            d1: d1M,
+            d1: Number(effectiveNear),
             w1: w1M,
             h1: h1M,
-            d2: d2M,
+            d2: Number(effectiveFar),
             w2: w2M,
-            h2: h2M
+            h2: h2M,
+            syncDof: true
           }
         : undefined;
 
@@ -489,7 +490,12 @@ export const ScannerLibraryModal: React.FC = () => {
                           <input
                             type="number"
                             value={d1}
-                            onChange={(e) => setD1(Number(e.target.value))}
+                            onChange={(e) => {
+                              const val = parseFloat(e.target.value) || 0;
+                              setD1(val);
+                              const m = fromDisplayLength(val, dimUnit);
+                              if (m > 0) setDofNear(m);
+                            }}
                             className="w-full bg-slate-950 border border-slate-700 rounded px-2 py-1 text-slate-200 text-xs focus:outline-none focus:border-cyan-400"
                           />
                         </div>
@@ -498,7 +504,7 @@ export const ScannerLibraryModal: React.FC = () => {
                           <input
                             type="number"
                             value={w1}
-                            onChange={(e) => setW1(Number(e.target.value))}
+                            onChange={(e) => setW1(parseFloat(e.target.value) || 0)}
                             className="w-full bg-slate-950 border border-slate-700 rounded px-2 py-1 text-slate-200 text-xs focus:outline-none focus:border-cyan-400"
                           />
                         </div>
@@ -507,7 +513,7 @@ export const ScannerLibraryModal: React.FC = () => {
                           <input
                             type="number"
                             value={h1}
-                            onChange={(e) => setH1(Number(e.target.value))}
+                            onChange={(e) => setH1(parseFloat(e.target.value) || 0)}
                             className="w-full bg-slate-950 border border-slate-700 rounded px-2 py-1 text-slate-200 text-xs focus:outline-none focus:border-cyan-400"
                           />
                         </div>
@@ -523,7 +529,12 @@ export const ScannerLibraryModal: React.FC = () => {
                           <input
                             type="number"
                             value={d2}
-                            onChange={(e) => setD2(Number(e.target.value))}
+                            onChange={(e) => {
+                              const val = parseFloat(e.target.value) || 0;
+                              setD2(val);
+                              const m = fromDisplayLength(val, dimUnit);
+                              if (m > 0) setDofFar(m);
+                            }}
                             className="w-full bg-slate-950 border border-slate-700 rounded px-2 py-1 text-slate-200 text-xs focus:outline-none focus:border-cyan-400"
                           />
                         </div>
@@ -532,7 +543,7 @@ export const ScannerLibraryModal: React.FC = () => {
                           <input
                             type="number"
                             value={w2}
-                            onChange={(e) => setW2(Number(e.target.value))}
+                            onChange={(e) => setW2(parseFloat(e.target.value) || 0)}
                             className="w-full bg-slate-950 border border-slate-700 rounded px-2 py-1 text-slate-200 text-xs focus:outline-none focus:border-cyan-400"
                           />
                         </div>
@@ -541,7 +552,7 @@ export const ScannerLibraryModal: React.FC = () => {
                           <input
                             type="number"
                             value={h2}
-                            onChange={(e) => setH2(Number(e.target.value))}
+                            onChange={(e) => setH2(parseFloat(e.target.value) || 0)}
                             className="w-full bg-slate-950 border border-slate-700 rounded px-2 py-1 text-slate-200 text-xs focus:outline-none focus:border-cyan-400"
                           />
                         </div>
@@ -573,7 +584,11 @@ export const ScannerLibraryModal: React.FC = () => {
                     max={dimUnit === 'mm' ? 1500 : dimUnit === 'in' ? 60 : 1.5}
                     step={dimUnit === 'mm' ? 25 : 1}
                     accentColor="accent-rose-400"
-                    onChange={(v) => setDofNear(fromDisplayLength(v, dimUnit))}
+                    onChange={(v) => {
+                      const m = fromDisplayLength(v, dimUnit);
+                      setDofNear(m);
+                      setD1(v);
+                    }}
                   />
 
                   <NumberSliderInput
@@ -585,7 +600,11 @@ export const ScannerLibraryModal: React.FC = () => {
                     max={dimUnit === 'mm' ? 4000 : dimUnit === 'in' ? 160 : 4.0}
                     step={dimUnit === 'mm' ? 50 : 2}
                     accentColor="accent-emerald-400"
-                    onChange={(v) => setDofFar(fromDisplayLength(v, dimUnit))}
+                    onChange={(v) => {
+                      const m = fromDisplayLength(v, dimUnit);
+                      setDofFar(m);
+                      setD2(v);
+                    }}
                   />
                 </div>
               </div>

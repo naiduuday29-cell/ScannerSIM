@@ -351,7 +351,22 @@ export const SimulatorProvider: React.FC<{ children: ReactNode }> = ({ children 
         ...updates,
         position: updates.position ? { ...s.position, ...updates.position } : s.position,
         rotation: updates.rotation ? { ...s.rotation, ...updates.rotation } : s.rotation,
-        optical: updates.optical ? { ...s.optical, ...updates.optical } : s.optical,
+        optical: updates.optical
+          ? (() => {
+              const mergedOptical = { ...s.optical, ...updates.optical };
+              // Ensure twoPointCalibration d1 & d2 stay in lockstep with dofNear & dofFar
+              if (mergedOptical.twoPointCalibration) {
+                const targetD1 = updates.optical.dofNear !== undefined ? updates.optical.dofNear : mergedOptical.dofNear;
+                const targetD2 = updates.optical.dofFar !== undefined ? updates.optical.dofFar : mergedOptical.dofFar;
+                mergedOptical.twoPointCalibration = {
+                  ...mergedOptical.twoPointCalibration,
+                  d1: targetD1,
+                  d2: targetD2
+                };
+              }
+              return mergedOptical;
+            })()
+          : s.optical,
         mirror: updates.mirror
           ? {
               ...(s.mirror || {
@@ -464,7 +479,11 @@ export const SimulatorProvider: React.FC<{ children: ReactNode }> = ({ children 
           focalLengthMm: preset.optical.focalLengthMm || s.optical.focalLengthMm,
           scannerModel: preset.name,
           twoPointCalibration: preset.optical.twoPointCalibration
-            ? { ...preset.optical.twoPointCalibration }
+            ? {
+                ...preset.optical.twoPointCalibration,
+                d1: preset.optical.dofNear,
+                d2: preset.optical.dofFar
+              }
             : undefined
         }
       };

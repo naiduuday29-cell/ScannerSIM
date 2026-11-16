@@ -539,7 +539,20 @@ export const ScannerDeploymentCard: React.FC = () => {
                             <button
                               type="button"
                               disabled={scanner.isLocked}
-                              onClick={() => setFovInputMode(prev => ({ ...prev, [scanner.id]: 'angles' }))}
+                              onClick={() => {
+                                setFovInputMode(prev => ({ ...prev, [scanner.id]: 'angles' }));
+                                if (scanner.optical.twoPointCalibration?.enabled) {
+                                  updateScanner(scanner.id, {
+                                    optical: {
+                                      ...scanner.optical,
+                                      twoPointCalibration: {
+                                        ...scanner.optical.twoPointCalibration,
+                                        enabled: false
+                                      }
+                                    }
+                                  });
+                                }
+                              }}
                               className={`px-2 py-0.5 rounded transition-all cursor-pointer ${
                                 (fovInputMode[scanner.id] || (scanner.optical.twoPointCalibration?.enabled ? 'twopoint' : 'angles')) === 'angles'
                                   ? 'bg-amber-500/20 text-amber-300 font-bold border border-amber-500/40 shadow-sm'
@@ -551,7 +564,34 @@ export const ScannerDeploymentCard: React.FC = () => {
                             <button
                               type="button"
                               disabled={scanner.isLocked}
-                              onClick={() => setFovInputMode(prev => ({ ...prev, [scanner.id]: 'twopoint' }))}
+                              onClick={() => {
+                                setFovInputMode(prev => ({ ...prev, [scanner.id]: 'twopoint' }));
+                                const existingCal = scanner.optical.twoPointCalibration;
+                                const d1 = existingCal?.d1 ?? scanner.optical.dofNear;
+                                const d2 = existingCal?.d2 ?? scanner.optical.dofFar;
+                                const hRad = THREE.MathUtils.degToRad(scanner.optical.horizontalFov);
+                                const vRad = THREE.MathUtils.degToRad(scanner.optical.verticalFov);
+                                const w1 = existingCal?.w1 ?? (2 * d1 * Math.tan(hRad / 2));
+                                const h1 = existingCal?.h1 ?? (2 * d1 * Math.tan(vRad / 2));
+                                const w2 = existingCal?.w2 ?? (2 * d2 * Math.tan(hRad / 2));
+                                const h2 = existingCal?.h2 ?? (2 * d2 * Math.tan(vRad / 2));
+
+                                updateScanner(scanner.id, {
+                                  optical: {
+                                    ...scanner.optical,
+                                    twoPointCalibration: {
+                                      enabled: true,
+                                      d1,
+                                      w1,
+                                      h1,
+                                      d2,
+                                      w2,
+                                      h2,
+                                      syncDof: true
+                                    }
+                                  }
+                                });
+                              }}
                               className={`px-2 py-0.5 rounded transition-all flex items-center gap-1 cursor-pointer ${
                                 (fovInputMode[scanner.id] || (scanner.optical.twoPointCalibration?.enabled ? 'twopoint' : 'angles')) === 'twopoint'
                                   ? 'bg-cyan-500/20 text-cyan-300 font-bold border border-cyan-500/40 shadow-sm'
@@ -608,6 +648,7 @@ export const ScannerDeploymentCard: React.FC = () => {
                         ) : (
                           /* MODE 2: 2-Point Distance Capture Area Calculator */
                           <TwoPointFovCalculator
+                            key={scanner.id}
                             scanner={scanner}
                             dimUnit={dimUnit}
                             disabled={scanner.isLocked}
@@ -638,8 +679,20 @@ export const ScannerDeploymentCard: React.FC = () => {
                           disabled={scanner.isLocked}
                           accentColor="accent-rose-400"
                           onChange={(val) => {
+                            const newNear = fromDisplayLength(val, dimUnit);
                             updateScanner(scanner.id, {
-                              optical: { ...scanner.optical, dofNear: fromDisplayLength(val, dimUnit) }
+                              optical: {
+                                ...scanner.optical,
+                                dofNear: newNear,
+                                ...(scanner.optical.twoPointCalibration
+                                  ? {
+                                      twoPointCalibration: {
+                                        ...scanner.optical.twoPointCalibration,
+                                        d1: newNear
+                                      }
+                                    }
+                                  : {})
+                              }
                             });
                           }}
                         />
@@ -656,8 +709,20 @@ export const ScannerDeploymentCard: React.FC = () => {
                           disabled={scanner.isLocked}
                           accentColor="accent-emerald-400"
                           onChange={(val) => {
+                            const newFar = fromDisplayLength(val, dimUnit);
                             updateScanner(scanner.id, {
-                              optical: { ...scanner.optical, dofFar: fromDisplayLength(val, dimUnit) }
+                              optical: {
+                                ...scanner.optical,
+                                dofFar: newFar,
+                                ...(scanner.optical.twoPointCalibration
+                                  ? {
+                                      twoPointCalibration: {
+                                        ...scanner.optical.twoPointCalibration,
+                                        d2: newFar
+                                      }
+                                    }
+                                  : {})
+                              }
                             });
                           }}
                         />
